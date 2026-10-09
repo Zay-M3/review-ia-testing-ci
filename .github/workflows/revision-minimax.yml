@@ -280,11 +280,20 @@ jobs:
           # No nos fiamos de su palabra: vamos al comentario que la IA acaba
           # de postear y buscamos la linea "VEREDICTO: ...". Esa linea decide.
           #
-          # ⚠️ OJO CON EL NOMBRE DEL CAMPO: aca va `.author.login`, NO
-          # `.user.login`. En el JSON que devuelve `gh pr view` el autor del
-          # comentario se llama `author`; `user` NO existe, da null, el `select`
-          # no matchea nunca y nos quedamos con la lista vacia. Por eso el
-          # check se ponia en rojo aunque la IA hubiera puesto APTO.
+          # ⚠️ DOS TRAMPAS EN ESTA LINEA (costaron 6 checks en rojo):
+          #
+          # 1) El campo se llama `author`, NO `user`. `user` no existe en el JSON
+          #    de `gh pr view`, da null, el `select` no matchea NUNCA y nos
+          #    quedamos con la lista vacia.
+          #
+          # 2) El login es `github-actions`, NO `github-actions[bot]`. Los
+          #    corchetes son la forma que usa la API de REST de GitHub; `gh`
+          #    (que habla por GraphQL) devuelve el login pelado. Con los
+          #    corchetes el `select` tampoco matchea.
+          #
+          # Como en los dos casos la lista queda vacia, el script llegaba
+          #    al final con `$veredicto` vacio y ponia el check en ROJO por
+          #    mas que la IA ya hubiera posteado `VEREDICTO: APTO`.
           #
           # El filtro `.[-1]` se queda con el ULTIMO comentario del bot, el
           # recien hecho. Sin eso leeriamos todos y la ultima linea seria del
@@ -301,7 +310,7 @@ jobs:
           # con finales de linea de Windows, el patron no matchea y el check
           # se pone rojo por una razon que nadie entiende.
           veredicto=$(gh pr view ${{ github.event.pull_request.number }} --json comments \
-            --jq '[.comments[] | select(.author.login == "github-actions[bot]")] | .[-1].body' \
+            --jq '[.comments[] | select(.author.login == "github-actions")] | .[-1].body' \
             | tr -d '\r' \
             | grep -E '^[[:space:]]*VEREDICTO:' \
             | tail -n 1 \
@@ -331,4 +340,5 @@ jobs:
 
           echo ""
           echo "✅ VEREDICTO: APTO — el check queda en VERDE."
+
 
