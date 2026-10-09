@@ -98,6 +98,37 @@ jobs:
           echo "ANTHROPIC_API_KEY=" >> $GITHUB_ENV
 
       # -------------------------------------------------------------------------
+      # PASO 2 BIS — CHEQUEAR QUE LLEGÓ LA CLAVE
+      # -------------------------------------------------------------------------
+      # Este paso es una barrera: si la clave no llegó, se frena acá con un
+      # mensaje que dice QUÉ HAY QUE ARREGLAR. Sin esto, el workflow se cae
+      # más abajo con un error de autenticación que no explica nada.
+      #
+      # Fijate en `secrets.X || vars.X`:
+      #   - `secrets.` lee la pestaña SECRETS de GitHub
+      #   - `vars.`    lee la pestaña VARIABLES de GitHub
+      # Con el `||` nos sirve de las dos. Si guardaste la clave en Variables
+      # en vez de en Secrets, esta versión funciona igual.
+      - name: 🔎 Chequear que llegó la clave
+        env:
+          KEY: ${{ secrets.MINIMAX_API_KEY || vars.MINIMAX_API_KEY }}
+        run: |
+          if [ -z "$KEY" ]; then
+            echo "❌ No llegó ninguna clave de MiniMax. Revisá esto:"
+            echo ""
+            echo "   1) El nombre tiene que ser EXACTAMENTE: MINIMAX_API_KEY"
+            echo "      (GitHub no acepta espacios: si le pusiste 'Minimals API Key',"
+            echo "       quedó como 'Minimals_API_Key' y no sirve)"
+            echo "   2) Que esté en la pestaña SECRETS, no en la de VARIABLES."
+            echo "      (o en VARIABLES, pero entonces el nombre también tiene"
+            echo "       que ser MINIMAX_API_KEY)"
+            echo ""
+            echo "   Configurá: Settings → Secrets and variables → Actions"
+            exit 1
+          fi
+          echo "✅ Llegó la clave. Empieza la revisión."
+
+      # -------------------------------------------------------------------------
       # PASO 3 — LA IA HACE LA REVISIÓN
       # -------------------------------------------------------------------------
       - name: 🔍 Revisar la Pull Request
@@ -124,7 +155,7 @@ jobs:
           # Confundirlos es el error más común de esta configuración.
           #
           ANTHROPIC_BASE_URL: https://api.minimax.io/anthropic
-          ANTHROPIC_AUTH_TOKEN: ${{ secrets.MINIMAX_API_KEY }}
+          ANTHROPIC_AUTH_TOKEN: ${{ secrets.MINIMAX_API_KEY || vars.MINIMAX_API_KEY }}
 
           # -----------------------------------------------------------------------
           # 🧠 QUÉ MODELO USAR
