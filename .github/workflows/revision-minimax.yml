@@ -277,19 +277,39 @@ jobs:
 
           # ---------- LEEMOS EL VEREDICTO QUE DIJO LA IA -------------------
           # No nos fiamos de su palabra: vamos al comentario que la IA acaba
-          # de postear y buscamos la línea "VEREDICTO: ...". Esa línea decide.
+          # de postear y buscamos la linea "VEREDICTO: ...". Esa linea decide.
           #
           # El filtro `.[-1]` se queda con el ULTIMO comentario del bot, el
-          # recién hecho. Sin eso leeríamos todos y la última línea sería del
+          # recien hecho. Sin eso leeriamos todos y la ultima linea seria del
           # comentario viejo, con otro veredicto.
+          #
+          # OJO CON EL `|| true` DEL FINAL: NO es adorno. Si ninguna linea
+          # matchea, `grep` sale con error, y como el shell de GitHub corre con
+          # `set -e` eso MATABA el script en el acto, sin llegar al mensaje de
+          # abajo. Por eso el log terminaba en "Process completed with exit
+          # code 1" sin decir por que. Con `|| true` el error se convierte en
+          # texto vacio y aca abajo le decimos que no la damos por buena.
+          #
+          # `tr -d '\r'` borra los retornos de carro: si el comentario llega
+          # con finales de linea de Windows, el patron no matchea y el check
+          # se pone rojo por una razon que nadie entiende.
           veredicto=$(gh pr view ${{ github.event.pull_request.number }} --json comments \
             --jq '[.comments[] | select(.user.login == "github-actions[bot]")] | .[-1].body' \
-            | grep -E '^VEREDICTO:' )
+            | tr -d '\r' \
+            | grep -E '^[[:space:]]*VEREDICTO:' \
+            | tail -n 1 \
+            || true)
 
           if [ -z "$veredicto" ]; then
             echo "⚠️ La IA no escribió ninguna línea VEREDICTO. No la damos por buena."
             exit 1
           fi
+
+          # Le sacamos los espacios de los costados y comparamos todo en
+          # mayusculas. Asi un "VEREDICTO:  APTO" con doble espacio, o escrito
+          # en minusculas, NO cuelga el workflow (esto era el AVISAR n°2 que
+          # nos dejo la propia IA en su comentario).
+          veredicto=$(echo "$veredicto" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//' | tr '[:lower:]' '[:upper:]')
 
           echo "Veredicto leído: $veredicto"
 
@@ -301,3 +321,6 @@ jobs:
             echo "   mergear sin mirarla."
             exit 1
           fi
+
+          echo ""
+          echo "✅ VEREDICTO: APTO — el check queda en VERDE."
