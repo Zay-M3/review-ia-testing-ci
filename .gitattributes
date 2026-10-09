@@ -1,0 +1,35 @@
+# =============================================================================
+#  .gitattributes - le dice a Git como guardar los saltos de linea
+# =============================================================================
+#
+#  PARA UN NINO:
+#
+#  Windows y Linux usan dos teclas distintas para "bajar de linea":
+#
+#     Windows (CRLF) = "Enter" normal, deja un rantito invisible al final.
+#     Linux   (LF)   = un solo "Enter", limpio.
+#
+#  GitHub corre Linux. Si subimos un archivo de texto con los rants de
+#  Windows, Linux lo lee como texto arruinado. En los archivos de texto normal
+#  no pasa nada grave, pero en los SCRIPTS BASH es un problema real: el
+#  comando "/usr/bin/env bash\r" no existe, y el script explota con un error.
+#
+#  Este archivo obliga a que los .sh SIEMPRE se guarden con LF, aunque los
+#  escribas desde Windows. Asi el script llega entero a GitHub.
+#
+#  Es como un acordate de "los archivos de shell van siempre con Unix".
+# =============================================================================
+
+# Archivos de shell: SIEMPRE con saltos de linea de Unix (obligatorio).
+*.sh text eol=lf
+
+# Archivos de configuracion de GitHub: LF tambien, para evitar sorpresas.
+*.yml text eol=lf
+*.yaml text eol=lf
+
+# Archivos .bat y .cmd: estos SI necesitan los rants de Windows.
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# El resto (markdown, .gitignore, etc.) se deja como Git lo configure.
+* text=auto
