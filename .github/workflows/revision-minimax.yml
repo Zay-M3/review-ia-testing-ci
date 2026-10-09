@@ -85,12 +85,17 @@ jobs:
       # Porque si las dos existen, gana la de Anthropic (apunta a un servidor
       # donde no tenés cuenta) y el paso 3 falla con un error rarísimo.
       # Es como tener dos llaves de la misma puerta: hay que sacar la vieja.
+      #
+      # ⚠️ OJO CON EL FORMATO (esto rompió el workflow el 08/10/2026):
+      # GitHub lee este archivo y en cada línea espera "NOMBRE=valor".
+      #   echo "NOMBRE=" >> $GITHUB_ENV   ✅ correcto (vaciá la variable)
+      #   echo "NOMBRE"   >> $GITHUB_ENV   ❌ error: "Invalid format 'NOMBRE'"
+      #   echo ""        >> $GITHUB_ENV   ❌ error: línea vacía, GitHub la rechaza
+      # Por eso NO hay líneas con `echo ""` acá abajo.
       - name: 🧹 Limpiar configuración vieja de Anthropic
         run: |
-          echo "ANTHROPIC_AUTH_TOKEN" >> $GITHUB_ENV
-          echo "" >> $GITHUB_ENV
-          echo "ANTHROPIC_API_KEY" >> $GITHUB_ENV
-          echo "" >> $GITHUB_ENV
+          echo "ANTHROPIC_AUTH_TOKEN=" >> $GITHUB_ENV
+          echo "ANTHROPIC_API_KEY=" >> $GITHUB_ENV
 
       # -------------------------------------------------------------------------
       # PASO 3 — LA IA HACE LA REVISIÓN
