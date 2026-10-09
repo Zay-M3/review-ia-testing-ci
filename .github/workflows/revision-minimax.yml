@@ -98,6 +98,46 @@ jobs:
           echo "ANTHROPIC_API_KEY=" >> $GITHUB_ENV
 
       # -------------------------------------------------------------------------
+      # PASO 2 BIS — DIAGNÓSTICO: ¿QUÉ CLAVES VE ESTE JOB?
+      # -------------------------------------------------------------------------
+      # `toJSON(secrets)` es un truco de GitHub: devuelve la lista con los
+      # NOMBRES de todos los secretos que tiene disponible este job, con el
+      # valor reemplazado por ***. O sea: no se filtra nada, pero nos deja
+      # ver si la clave llegó y con qué nombre exacto.
+      #
+      # Este paso corre SIEMPRE (aunque los anteriores fallen) y deja el
+      # resultado anotado en la propia PR, así no hace falta tener los logs.
+      #
+      # ⚠️ `secrets.GITHUB_TOKEN` NO es un token que tengas que crear vos:
+      # GitHub lo genera solo, le da permiso de commenting en la PR y lo
+      # borra cuando termina el job. Es distinto a tu clave de MiniMax.
+      - name: 🩺 Diagnóstico: qué claves ve este job
+        if: always()
+        env:
+          SECRETS_JSON: ${{ toJSON(secrets) }}
+          VARS_JSON: ${{ toJSON(vars) }}
+          PR: ${{ github.event.pull_request.number }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          printf '### 🩺 Diagnóstico del revisor\n\n**Secretos que ve este job** (los valores van tapados):\n\n```json\n%s\n```\n\n**Variables de GitHub:**\n\n```json\n%s\n```\n' "$SECRETS_JSON" "$VARS_JSON" > cuerpo.txt
+          {
+            echo "### 🩺 Diagnóstico del revisor"
+            echo ""
+            echo "**Secretos que ve este job** (los valores van tapados):"
+            echo ""
+            echo '```json'
+            echo "$SECRETS_JSON"
+            echo '```'
+            echo ""
+            echo "**Variables de GitHub:**"
+            echo ""
+            echo '```json'
+            echo "$VARS_JSON"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          gh pr comment "$PR" --body-file cuerpo.txt || echo "No se pudo comentar en la PR"
+
+      # -------------------------------------------------------------------------
       # PASO 2 BIS — CHEQUEAR QUE LLEGÓ LA CLAVE
       # -------------------------------------------------------------------------
       # Este paso es una barrera: si la clave no llegó, se frena acá con un
