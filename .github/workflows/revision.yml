@@ -1,0 +1,253 @@
+# =============================================================================
+#  🤖 REVISOR AUTOMÁTICO DE CÓDIGO CON IA
+# =============================================================================
+#
+#  📖 SI ESTÁS LEYENDO ESTO POR PRIMERA VEZ:
+#
+#  Imaginate una fábrica de GALLETAS. Vos sos el jefe. Cada vez que llega una
+#  caja de galletas nueva (una "Pull Request"), pasa por una máquina que las
+#  revisa antes de poder mandarlas a la góndola (el "merge").
+#
+#  Esta máquina es la IA. Lee las reglas del archivo REVIEW.md de la raíz.
+#  Si encuentra una galleta envenenada, frena la caja y te avisa.
+#
+#  ESTE ARCHIVO es el "plano" de esa máquina.
+#
+#  🔧 QUÉ ES UN "WORKFLOW"?
+#     GitHub lee esta carpeta (.github/workflows) y, cada vez que pasa algo
+#     (en este caso: alguien abre o actualiza una PR), arranca una máquina
+#     virtual limpia de Linux, le da este archivo como instrucción, y lo
+#     ejecuta paso a paso.
+#
+#  💡 DÓNDE SE USA?
+#     En el botón "Actions" de tu repositorio en GitHub, una vez que lo subís.
+#     Localmente este archivo no hace nada por sí solo.
+# =============================================================================
+
+
+# -----------------------------------------------------------------------------
+# 1) EL NOMBRE DEL PROCESO
+# -----------------------------------------------------------------------------
+# Es solo el título que vas a ver en la lista de la pestaña "Actions".
+# Ponele algo reconocible para no perderte entre los demás procesos.
+name: Revisión automática con IA
+
+
+# -----------------------------------------------------------------------------
+# 2) CUÁNDO SE DISPARA ESTE PROCESO
+# -----------------------------------------------------------------------------
+# `on:` significa "cuando". Es una lista de momentos que hacen arrancar la máquina.
+#
+#   pull_request      → cuando alguien quiere "juntar" sus cambios con el código
+#                       principal. Es el momento perfecto para revisar.
+#
+#   types: [...]      → los momentos EXACTOS en que tiene que arrancar:
+#       opened      → se abre una PR nueva.
+#       synchronize → le agregan un commit más a una PR ya abierta.
+#       reopened    → reabren una PR que estaba cerrada.
+#
+#   ¿Por qué NO reacciona a `closed`? Porque cuando la PR ya está cerrada,
+#   revisar no sirve de nada.
+#
+#   📌 Truco: GitHub no corre esto si el workflow está en la rama `main`.
+#   Por eso el primer commit tiene que ir directo a `main`.
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+
+# -----------------------------------------------------------------------------
+# 3) PERMISOS  ← ESTA PARTE ES LA MÁS IMPORTANTE Y LA MÁS OLVIDADA
+# -----------------------------------------------------------------------------
+# GitHub es MUY desconfiado: por defecto, cada proceso corre como un usuario
+# que no puede tocar nada. Acá le damos permiso para lo mínimo.
+#
+# Por defecto GitHub NO da permiso para que las Actions lean ni escriban
+# cosas del repo. Sin esto, la IA no puede comentar en la PR.
+permissions:
+  contents: read            # 📖 Leer el código. Nada más.
+  pull-requests: write      # 💬 Escribir comentarios en la PR (su única misión).
+  id-token: write           # 🎫 Token de identidad, por si usás Bedrock/Vertex.
+
+
+# =============================================================================
+#  EL PROCESO
+# =============================================================================
+jobs:
+  revisar:
+    # `runs-on` = qué máquina virtual usar. GitHub te regala una gratis.
+    runs-on: ubuntu-latest
+
+    # Asignamos un nombre lindo a este paso, para reconocerlo en la pantalla.
+    name: 🧠 La IA lee el código
+
+    steps:
+      # -------------------------------------------------------------------------
+      # PASO 1 — BAJAR EL CÓDIGO
+      # -------------------------------------------------------------------------
+      # La máquina virtual arranca VACÍA. No tiene tu proyecto.
+      # Este paso es como "clonar el repo" pero automáticamente.
+      #
+      #   actions/checkout  → es la acción oficial de GitHub para esto.
+      #   @v6              → el número de versión. Si no lo ponés, no funciona.
+      #   fetch-depth: 1   → "no me traigas la historia entera, solo lo último".
+      #                      Hace el proceso 10 veces más rápido (y más barato).
+      - name: 📥 Descargar el código
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 1
+
+      # -------------------------------------------------------------------------
+      # PASO 2 — LA IA HACE LA REVISIÓN
+      # -------------------------------------------------------------------------
+      # Acá está el corazón de todo. La acción oficial de Anthropic lanza Claude
+      # dentro de la máquina, le da acceso al código, y lo revisa.
+      - name: 🔍 Revisar la Pull Request
+        uses: anthropics/claude-code-action@v1
+        with:
+          # ---------------------------------------------------------------------
+          # CÓMO SE PAGA
+          # ---------------------------------------------------------------------
+          # Hay dos maneras. Usá la que tengas:
+          #
+          #   A) CON TU SUSCRIPCIÓN de Claude Pro/Max (la que pagás todos los meses).
+          #      Para esto hacé UN SOLO VEZ, en tu computadora:
+          #
+          #          claude setup-token
+          #
+          #      Te va a pedir abrir el navegador y autorizar. Te entrega un
+          #      texto largo que empieza con `sk-ant-oat01-`. COPIALO.
+          #      Después andá al repo en GitHub → Settings → Secrets and
+          #      variables → Actions → "New repository secret":
+          #          Name:  CLAUDE_CODE_OAUTH_TOKEN
+          #          Value: el texto que copiaste
+          #
+          #      Con esto NO pagás nada extra: usás tu misma suscripción.
+          #
+          #   B) CON LA API (paga aparte, por uso). Si preferís esta, comentá
+          #      la línea de arriba y descomentá la de abajo, y poné el secret
+          #      ANTHROPIC_API_KEY en GitHub.
+          #
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          # anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+
+          # ---------------------------------------------------------------------
+          # track_progress: true
+          # ---------------------------------------------------------------------
+          # Sin esto, la PR queda en silencio durante 2 minutos y parece colgada.
+          # Con esto, la IA va dejando un comentario con casillas de progreso
+          # ("Leyendo archivos ☑, Analizando ☑...") que se va actualizando.
+          # Mucho más tranquilo de mirar.
+          track_progress: true
+
+          # ---------------------------------------------------------------------
+          # EL PROMPT = el encargo que le damos a la IA
+          # ---------------------------------------------------------------------
+          # `prompt` es lo que le pedimos. OJO: es texto normal, con saltos de
+          # línea. Esto NO es código.
+          #
+          # `${{ ... }}` son "huecos" que GitHub rellena solo con datos reales
+          # del evento (el nombre del repo, el número de la PR). Sin esto, la IA
+          # no sabría sobre qué PR trabajar.
+          prompt: |
+            Soy el revisor automático de este repositorio.
+
+            DATOS DE ESTA EJECUCIÓN:
+            - Repositorio: ${{ github.repository }}
+            - Número de PR:   ${{ github.event.pull_request.number }}
+
+            PASOS QUE TENÉS QUE SEGUIR, EN ESTE ORDEN:
+
+            1) LEÉ el archivo REVIEW.md que está en la raíz del repositorio.
+               Ese archivo tiene las reglas del proyecto, divididas en tres
+               categorías: SIEMPRE BLOQUEAR, AVISAR e IGNORAR.
+               No te lo saltes: es el manual que tenés que aplicar.
+
+            2) MIRÁ los cambios que propone ESTA PR.
+               Para verlos usá el comando:
+                   gh pr diff ${{ github.event.pull_request.number }}
+               (La rama de la PR ya está descargada en esta máquina.)
+
+            3) COMPARÁ esos cambios contra las reglas del REVIEW.md.
+
+            4) ESCRIBÍ un comentario en la PR con:
+                 - Lo que está MAL, diciendo el archivo y la línea exacta.
+                 - Lo que es una sugerencia (categoría AVISAR).
+                 - Al final, un resumen corto.
+
+            5) ⚠️ LO MÁS IMPORTANTE ⚠️
+               Terminá tu comentario con una línea EXACTA y sola, que tiene
+               que ser una de estas dos:
+
+                   VEREDICTO: APTO
+                   VEREDICTO: NO APTO
+
+               Poné "NO APTO" si encontraste CUALQUIER regla de la categoría
+               SIEMPRE BLOQUEAR. Si solo hay cosas de la categoría AVISAR,
+               poné "APTO".
+               No escribas NADA más después de esa línea.
+
+            6) SUBÍ el comentario a GitHub con:
+                   gh pr comment ${{ github.event.pull_request.number }} --body "..."
+
+          # ---------------------------------------------------------------------
+          # QUÉ HERRAMIENTAS PUEDE USAR LA IA
+          # ---------------------------------------------------------------------
+          # Por seguridad, la IA solo puede hacer lo que le autorices acá.
+          # Esta es la lista blanca:
+          #
+          #   mcp__github_inline_comment__create_inline_comment → dejar un
+          #     comentario pegado en una línea exacta del código (lo más útil).
+          #   Bash(gh pr comment:*)   → dejar un comentario general en la PR.
+          #   Bash(gh pr diff:*)      → ver qué cambió.
+          #   Bash(gh pr view:*)      → ver los datos de la PR.
+          #
+          # NOTA: puede LEER, pero no puede hacer commits ni borrar cosas.
+          claude_args: |
+            --allowedTools "mcp__github_inline_comment__create_inline_comment,Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*)"
+
+  # ===========================================================================
+  #  SEGUNDO PROCESO: el candado 🔒
+  # ===========================================================================
+  # ¿Por qué hace falta si la IA ya escribió "NO APTO"?
+  #
+  # Porque un comentario no detiene nada. GitHub solo frena el merge si un
+  # PROCESO termina en error (marca roja).
+  #
+  # Este proceso es el que traduce:
+  #      "la IA dijo NO APTO"   →   el proceso termina en error  →  no se puede mergear
+  #      "la IA dijo APTO"      →   el proceso termina en verde  →  se puede mergear
+  #
+  #   needs: revisar  →  espera a que el proceso anterior termine.
+  bloquear-merge:
+    name: 🔒 ¿Se puede mergear?
+    needs: revisar
+    runs-on: ubuntu-latest
+
+    # Solo corre en Linux (el runner de GitHub), donde ya viene `gh` instalado.
+    steps:
+      # -------------------------------------------------------------------------
+      # PASO 1 — Anotar la hora de arranque
+      # -------------------------------------------------------------------------
+      # Guardamos en un archivo de texto la hora exacta en que empezó este run.
+      # Sirve para IGNORAR comentarios viejos: solo nos interesan los que la IA
+      # escribió en ESTA ejecución, no los de PRs anteriores.
+      - name: 🕐 Guardar la hora de arranque
+        run: echo "DESDE=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_ENV"
+
+      # -------------------------------------------------------------------------
+      # PASO 2 — Leer los comentarios y aplicar el candado
+      # -------------------------------------------------------------------------
+      - name: 🔎 Buscar el veredicto
+        env:
+          # `gh` (la herramienta de línea de comandos de GitHub) necesita saber
+          # con quién se conecta. Sin esto dice "no estoy autenticado".
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # `jq` es un programa que extrae pedacitos de los JSON que devuelve
+          # GitHub. Lo usamos para leer SOLO el comentario más reciente.
+          #
+          # NOTA: la variable DESDE no se escribe acá a propósito. Ya quedó
+          # exportada sola en el paso anterior (eso hace el `>> $GITHUB_ENV`).
+        run: |
+          # Explicado paso a paso dentro de scripts/bloquear-merge.sh
+          bash scripts/bloquear-merge.sh

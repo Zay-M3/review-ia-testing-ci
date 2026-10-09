@@ -1,0 +1,24 @@
+# Archivos que node_modules (las librerias descargadas)
+node_modules/
+
+# Archivos que se generan al compilar
+dist/
+build/
+*.min.js
+
+# Cosas del sistema operativo que no hay que subir nunca
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Logs
+*.log
+npm-debug.log*
+
+# Variables de entorno (ahi van los secretos, NUNCA en el repo)
+.env
+.env.local
+
+# Editores
+.vscode/
+.idea/
