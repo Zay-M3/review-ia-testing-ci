@@ -133,9 +133,9 @@ jobs:
       # "Minimax API Key" quedaría como "Minimax_API_Key" y no coincidiría.
       - name: 🔎 Chequear que llegó la clave
         env:
-          KEY: ${{ secrets.MINIMAX_API_KEY }}
+          CLAVE_MINIMAX: ${{ secrets.MINIMAX_API_KEY }}
         run: |
-          if [ -z "$KEY" ]; then
+          if [ -z "$CLAVE_MINIMAX" ]; then
             echo "❌ No llegó ninguna clave de MiniMax. Revisá esto:"
             echo ""
             echo "   1) El nombre tiene que ser EXACTAMENTE: MINIMAX_API_KEY"
@@ -252,7 +252,8 @@ jobs:
           # ---------- 2) Corremos la IA con ese encargo ---------------------
           # `timeout` es un seguro: si la IA se cuelga, a los 20 minutos el
           # job se frena solo en vez de quedarse colgado para siempre.
-          timeout 1200 claude -p "$(cat encargo.md)" \
+          MINUTOS_MAXIMOS=20
+          timeout $((MINUTOS_MAXIMOS * 60)) claude -p "$(cat encargo.md)" \
             --model MiniMax-M3.1-Flash-Preview \
             --output-format text \
             --permission-mode bypassPermissions \
@@ -279,6 +280,12 @@ jobs:
           # No nos fiamos de su palabra: vamos al comentario que la IA acaba
           # de postear y buscamos la linea "VEREDICTO: ...". Esa linea decide.
           #
+          # ⚠️ OJO CON EL NOMBRE DEL CAMPO: aca va `.author.login`, NO
+          # `.user.login`. En el JSON que devuelve `gh pr view` el autor del
+          # comentario se llama `author`; `user` NO existe, da null, el `select`
+          # no matchea nunca y nos quedamos con la lista vacia. Por eso el
+          # check se ponia en rojo aunque la IA hubiera puesto APTO.
+          #
           # El filtro `.[-1]` se queda con el ULTIMO comentario del bot, el
           # recien hecho. Sin eso leeriamos todos y la ultima linea seria del
           # comentario viejo, con otro veredicto.
@@ -294,7 +301,7 @@ jobs:
           # con finales de linea de Windows, el patron no matchea y el check
           # se pone rojo por una razon que nadie entiende.
           veredicto=$(gh pr view ${{ github.event.pull_request.number }} --json comments \
-            --jq '[.comments[] | select(.user.login == "github-actions[bot]")] | .[-1].body' \
+            --jq '[.comments[] | select(.author.login == "github-actions[bot]")] | .[-1].body' \
             | tr -d '\r' \
             | grep -E '^[[:space:]]*VEREDICTO:' \
             | tail -n 1 \
@@ -324,3 +331,4 @@ jobs:
 
           echo ""
           echo "✅ VEREDICTO: APTO — el check queda en VERDE."
+
