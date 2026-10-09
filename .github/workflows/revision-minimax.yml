@@ -109,9 +109,15 @@ jobs:
       #   - `vars.`    lee la pestaña VARIABLES de GitHub
       # Con el `||` nos sirve de las dos. Si guardaste la clave en Variables
       # en vez de en Secrets, esta versión funciona igual.
+      #
+      # 🧹 TEMPORAL: abajo están los nombres alternativos que alguien podría
+      #    haber puesto mal (con "l" en vez de "x", o con espacios convertidos
+      #    en guion bajo). Sirven para que funcione aunque el secreto esté mal
+      #    escrito. Cuando lo renombres bien a MINIMAX_API_KEY, se pueden BORRAR
+      #    los alternatives y dejar solo el primero.
       - name: 🔎 Chequear que llegó la clave
         env:
-          KEY: ${{ secrets.MINIMAX_API_KEY || vars.MINIMAX_API_KEY }}
+          KEY: ${{ secrets.MINIMAX_API_KEY || vars.MINIMAX_API_KEY || secrets.Minimals_API_Key || vars.Minimals_API_Key || secrets.MINIMALS_API_KEY || vars.MINIMALS_API_KEY }}
         run: |
           if [ -z "$KEY" ]; then
             echo "❌ No llegó ninguna clave de MiniMax. Revisá esto:"
@@ -155,7 +161,7 @@ jobs:
           # Confundirlos es el error más común de esta configuración.
           #
           ANTHROPIC_BASE_URL: https://api.minimax.io/anthropic
-          ANTHROPIC_AUTH_TOKEN: ${{ secrets.MINIMAX_API_KEY || vars.MINIMAX_API_KEY }}
+          ANTHROPIC_AUTH_TOKEN: ${{ secrets.MINIMAX_API_KEY || vars.MINIMAX_API_KEY || secrets.Minimals_API_Key || vars.Minimals_API_Key || secrets.MINIMALS_API_KEY || vars.MINIMALS_API_KEY }}
 
           # -----------------------------------------------------------------------
           # 🧠 QUÉ MODELO USAR
