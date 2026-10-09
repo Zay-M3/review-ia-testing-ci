@@ -1,4 +1,4 @@
-﻿# =============================================================================
+# =============================================================================
 #  🤖 REVISOR AUTOMÁTICO DE CÓDIGO CON IA  —  VERSIÓN MINIMAX
 # =============================================================================
 #
@@ -71,7 +71,7 @@ jobs:
     #
     #   Si la clave vive dentro de un entorno, el workflow tiene que DECIRLE
     #   con qué entorno trabaja. Si no lo dice, GitHub finge que la clave no
-    #   existe (y el error que te da es unerl garaje que no dice nada).
+    #   existe (y el error que te da es un error que no dice nada).
     #
     # O sea: la clave estaba bien puesta y el que estaba incompleto era el
     # workflow. Ya lo corregimos.
@@ -122,15 +122,15 @@ jobs:
       # mensaje que dice QUÉ HAY QUE ARREGLAR. Sin esto, el workflow se cae
       # más abajo con un error de autenticación que no explica nada.
       #
-      # Fijate en `secrets.X || vars.X`:
-      #   - `secrets.` lee la pestaña SECRETS de GitHub
-      #   - `vars.`    lee la pestaña VARIABLES de GitHub
-      # Con el `||` nos sirve de las dos. Si guardaste la clave en Variables
-      # en vez de en Secrets, esta versión funciona igual.
+      # La clave se lee con `secrets.MINIMAX_API_KEY` y nada más. Ojo: en este
+      # repositorio la clave NO está en la pestaña SECRETS del repo, sino en el
+      # secreto del ENTORNO MINIMAX_API_KEY (declarado más arriba, en
+      # `environment:`). Desde el punto de vista del workflow el nombre es el
+      # mismo, y de ahí la lee GitHub.
       #
-      # ✅ El nombre de la clave está CORRECTO (es `MINIMAX_API_KEY`).
-      # Antes también aceptábamos nombres mal escritos por las dudas, pero ya
-      # no hace falta: se sabe que el nombre es ese y único.
+      # El nombre de la clave es `MINIMAX_API_KEY`, en mayúsculas y sin
+      # espacios: GitHub convierte los espacios en guiones bajos, así que
+      # "Minimax API Key" quedaría como "Minimax_API_Key" y no coincidiría.
       - name: 🔎 Chequear que llegó la clave
         env:
           KEY: ${{ secrets.MINIMAX_API_KEY }}
@@ -141,16 +141,16 @@ jobs:
             echo "   1) El nombre tiene que ser EXACTAMENTE: MINIMAX_API_KEY"
             echo "      (GitHub no acepta espacios: si le pusiste 'Minimals API Key',"
             echo "       quedó como 'Minimals_API_Key' y no sirve)"
-            echo "   2) Que esté en la pestaña SECRETS, no en la de VARIABLES."
-            echo "      (o en VARIABLES, pero entonces el nombre también tiene"
-            echo "       que ser MINIMAX_API_KEY)"
+            echo "   2) Que esté en el secreto del ENTORNO MINIMAX_API_KEY"
+            echo "      (Settings -> Environments -> MINIMAX_API_KEY"
+            echo "       -> Environment secrets -> New repository secret)"
             echo ""
-            echo "   Configurá: Settings → Secrets and variables → Actions"
+            echo "   Configurá: Settings -> Environments -> MINIMAX_API_KEY"
             exit 1
           fi
           echo "✅ Llegó la clave. Empieza la revisión."
 
-# -------------------------------------------------------------------------
+      # -------------------------------------------------------------------------
       # PASO 3 — LA IA HACE LA REVISIÓN
       # -------------------------------------------------------------------------
       # ⚠️ POR QUÉ ESTO YA NO USA LA "ACCIÓN" DE CLAUDE
@@ -191,7 +191,9 @@ jobs:
           # 📏 VENTANA DE CONTEXTO: le decimos que recorte sola (compacte) cuando
           #    se le llene, así no se corta a mitad de la revisión.
           CLAUDE_CODE_AUTO_COMPACT_WINDOW: "524288"
-          API_TIMEOUT_MS: "3000000"
+          # ⏱️ Cada pedido a la IA puede tardar hasta 15 minutos. Más que eso
+          #    ya no aporta nada: si tardó tanto, algo salió mal.
+          API_TIMEOUT_MS: "900000"
           CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: "1"
 
           # 🔑 PARA PODER COMENTAR EN LA PR (el token interno de GitHub Actions)
@@ -268,17 +270,16 @@ jobs:
             exit $codigo
           fi
 
-          # ---------- 3) Chequeo final: ¿existe el comentario? ---------------
-          # No nos fiamos de su palabra: vamos a ver si quedó posteado.
-          cuantos=$(gh pr view ${{ github.event.pull_request.number }} --json comments \
-            --jq '.comments[] | select(.user.login == "github-actions[bot]") | .body' \
-            | wc -l)
-          # ---------- 3) LEEMOS EL VEREDICTO QUE DIJO LA IA -------------------
-          # Vamos a buscar la línea "VEREDICTO: ..." en el comentario que
-          # acaba de postear. Esa línea es la que decide todo.
+          # ---------- LEEMOS EL VEREDICTO QUE DIJO LA IA -------------------
+          # No nos fiamos de su palabra: vamos al comentario que la IA acaba
+          # de postear y buscamos la línea "VEREDICTO: ...". Esa línea decide.
+          #
+          # El filtro `.[-1]` se queda con el ULTIMO comentario del bot, el
+          # recién hecho. Sin eso leeríamos todos y la última línea sería del
+          # comentario viejo, con otro veredicto.
           veredicto=$(gh pr view ${{ github.event.pull_request.number }} --json comments \
-            --jq '.comments[] | select(.user.login == "github-actions[bot]") | .body' \
-            | grep -E '^VEREDICTO:' | tail -n 1)
+            --jq '[.comments[] | select(.user.login == "github-actions[bot]")] | .[-1].body' \
+            | grep -E '^VEREDICTO:' )
 
           if [ -z "$veredicto" ]; then
             echo "⚠️ La IA no escribió ninguna línea VEREDICTO. No la damos por buena."
@@ -295,5 +296,3 @@ jobs:
             echo "   mergear sin mirarla."
             exit 1
           fi
-
-          echo "✅ VEREDICTO: APTO — la revisión pasa en verde."
