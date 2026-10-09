@@ -273,9 +273,27 @@ jobs:
           cuantos=$(gh pr view ${{ github.event.pull_request.number }} --json comments \
             --jq '.comments[] | select(.user.login == "github-actions[bot]") | .body' \
             | wc -l)
-          echo "Comentarios de github-actions[bot] en la PR: $cuantos"
-          if [ "$cuantos" -gt 0 ]; then
-            echo "✅ La IA posteó su comentario en la PR."
-          else
-            echo "⚠️ No veo comentario de github-actions[bot] en la PR."
+          # ---------- 3) LEEMOS EL VEREDICTO QUE DIJO LA IA -------------------
+          # Vamos a buscar la línea "VEREDICTO: ..." en el comentario que
+          # acaba de postear. Esa línea es la que decide todo.
+          veredicto=$(gh pr view ${{ github.event.pull_request.number }} --json comments \
+            --jq '.comments[] | select(.user.login == "github-actions[bot]") | .body' \
+            | grep -E '^VEREDICTO:' | tail -n 1)
+
+          if [ -z "$veredicto" ]; then
+            echo "⚠️ La IA no escribió ninguna línea VEREDICTO. No la damos por buena."
+            exit 1
           fi
+
+          echo "Veredicto leído: $veredicto"
+
+          if [ "$veredicto" = "VEREDICTO: NO APTO" ]; then
+            echo ""
+            echo "❌ VEREDICTO: NO APTO"
+            echo "   La revisión encontró problemas graves. El check queda en ROJO"
+            echo "   a propósito: así se ve de un vistazo que la PR no se puede"
+            echo "   mergear sin mirarla."
+            exit 1
+          fi
+
+          echo "✅ VEREDICTO: APTO — la revisión pasa en verde."
