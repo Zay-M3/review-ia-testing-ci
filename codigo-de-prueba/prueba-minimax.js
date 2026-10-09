@@ -133,8 +133,15 @@ app.get('/api/clientes', async (req, res) => {
     return res.status(401).json({ error: 'Tenés que iniciar sesión.' });
   }
 
-  // El id pedido tiene que ser un número entero, si viene algo.
-  const idPedido = leerId(req.query.id);
+  // El id pedido tiene que ser un número entero, si viene algo. Va dentro
+  // de un try porque `leerId` tira TypeError si no lo es, y sin esto un id
+  // raro en la URL rompería la ruta entera en vez de devolver un 400.
+  let idPedido;
+  try {
+    idPedido = leerId(req.query.id);
+  } catch (error) {
+    return res.status(400).json({ error: 'El id tiene que ser un número entero.' });
+  }
 
   if (sesion.rol !== 'admin') {
     // Un usuario que no es admin solo puede consultar su propio cliente.
@@ -150,8 +157,10 @@ app.get('/api/clientes', async (req, res) => {
   const pool = crearPool();
 
   try {
-    // Consulta CON PARÁMETROS: el id nunca se pega dentro del texto SQL,
-    // así no hay forma de inyectar código por la URL.
+    // Consulta CON PARÁMETROS: el id viaja como parámetro $1 y nunca se
+    // pega dentro del texto SQL, así no hay forma de inyectar código por
+    // la URL. Lo único que se interpola es COLUMNAS_PUBLICAS, que es una
+    // constante de este mismo archivo (no viene del usuario).
     const filasClientes = await pool.query(
       `SELECT ${COLUMNAS_PUBLICAS} FROM clientes WHERE ($1::int IS NULL OR id = $1)`,
       [idPedido]
@@ -179,6 +188,8 @@ app.get('/api/clientes/:id/privado', async (req, res) => {
   try {
     idCliente = leerId(req.params.id);
   } catch (error) {
+    // El id no era un número entero: es un error del que llama, no nuestro,
+    // así que no lo logueamos (solo ensuciaría el log del servidor).
     return res.status(400).json({ error: 'El id tiene que ser un número entero.' });
   }
 
