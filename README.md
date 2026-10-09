@@ -323,4 +323,73 @@ Lo que si cuesta:
 3. `claude setup-token` y pegar el secret en GitHub.
 4. Activar el Branch Protection con el check `🔒 ¿Se puede mergear?`.
 5. Crear una rama, tocar un archivo, abrir la PR.
-6. Ver que la IA comenta y que el semaforo se pone rojo o verde solo.
+6. Ver que la IA comenta y que el semaforo se pone rojo o verde solo.---
+
+## 7. ¿Claude o MiniMax? Elegí el tuyo
+
+Buena pregunta: **el workflow NO necesita Claude**. Hay dos archivos y cada
+uno habla con una IA distinta. Los dos hacen exactamente lo mismo.
+
+```
+┌─────────────────────────────┬──────────────────┬──────────────────┐
+│                             │  revision.yml    │revision-minimax.yml│
+├─────────────────────────────┼──────────────────┼──────────────────┤
+│ ¿Qué IA usa?                │  Claude          │  MiniMax         │
+│ ¿Qué necesitás tener?       │  Suscripción     │  Suscripción     │
+│                             │  de Claude       │  M Plan          │
+│ ¿Dónde sacás la credencial? │  `claude         │  platform.minimax│
+│                             │  setup-token`    │  .io → M Plan    │
+│ Nombre del secreto          │CLAUDE_CODE_     │  MINIMAX_API_KEY│
+│                             │  OAUTH_TOKEN     │                  │
+│ Costo del review            │  incluido en tu  │  incluido en tu  │
+│                             │  plan            │  plan            │
+└─────────────────────────────┴──────────────────┴──────────────────┘
+```
+
+### El truco que hace posible usar MiniMax
+
+Claude Code es un programa que, por dentro, habla con Anthropic usando un
+formato de mensajes propio. **MiniMax construyó un servidor que habla
+exactamente ese mismo formato** (lo llaman "Anthropic-Compatible Protocol").
+
+Entonces el mismo programa puede hablar con los dos: solo hay que decirle
+**a qué dirección** va y **con qué credencial**. Eso son dos renglones:
+
+```yaml
+ANTHROPIC_BASE_URL: https://api.minimax.io/anthropic
+ANTHROPIC_AUTH_TOKEN: ${{ secrets.MINIMAX_API_KEY }}
+```
+
+`BASE_URL` es la dirección de la puerta. `AUTH_TOKEN` es la credencial.
+
+> Fuente: docs oficiales de MiniMax,
+> `platform.minimax.io/docs/token-plan/other-tools` → "Anthropic-Compatible Protocol".
+
+### Cómo configurarlo (si elegís MiniMax)
+
+1. Entrá a **platform.minimax.io** y comprá el **M Plan** (el plan pensado
+   para programar con IA).
+2. Copiá tu **Subscription Key** (empieza con `sk-cp-...`).
+3. En tu repo: **Settings → Secrets and variables → Actions → New repository
+   secret**.
+4. Nombre: `MINIMAX_API_KEY`. Valor: la key que copiaste.
+5. Subí el repo y hacé una PR de prueba.
+
+### ⚠️ Importante: no actives los dos a la vez
+
+Si dejás los dos workflows files, cada PR dispara **dos revisiones** y vas
+a tener dos comentarios de IA peleándose por el mismo PR. Elegí uno y
+borrá el otro (o simplemente renombrá la extensión del que no uses a
+`.yml.txt`).
+
+---
+
+## 8. Problemas frecuentes
+
+| Síntoma | Causa probable | Solución |
+|---|---|---|
+| `Error: Invalid API key` | El secreto se llama distinto a como lo pide el workflow | Revisá el nombre: son **exactamente** `CLAUDE_CODE_OAUTH_TOKEN` o `MINIMAX_API_KEY` |
+| El semáforo nunca se pone rojo | Falta activar el Branch Protection (paso 6) | Settings → Rules → Rulesets |
+| `bloquear-merge.sh: not found` | Git lo guardó con saltos de línea de Windows | Ya está resuelto con `.gitattributes` |
+| La IA responde en chino o mezclando idiomas | El modelo se confundió | Agregalo a `REVIEW.md`: "Responde siempre en español" |
+| El workflow no arranca | El YAML tiene un error de sangría | Revisá que las líneas con `#` no estén pegadas a código |

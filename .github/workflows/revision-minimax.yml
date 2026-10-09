@@ -1,0 +1,218 @@
+# =============================================================================
+#  🤖 REVISOR AUTOMÁTICO DE CÓDIGO CON IA  —  VERSIÓN MINIMAX
+# =============================================================================
+#
+#  📖 SI ESTÁS LEYENDO ESTO POR PRIMERA VEZ:
+#
+#  Esto es IGUAL que revision.yml, pero habla con MiniMax en lugar de Claude.
+#  Los dos hacen lo mismo: revisan la Pull Request y ponen el semáforo.
+#
+#  🧠 EL TRUCO ESTÁ AQUÍ (y es lo más bonito de todo):
+#
+#  Claude Code es un programa que, por dentro, habla con Anthropic usando un
+#  formato de mensajes que se llama "formato Anthropic".
+#
+#  MiniMax construyó una puerta en su servidor que HABLA EXACTAMENTE ESE
+#  FORMATO. Es como si en un edificio todos tuvieran que hablar en un idioma
+#  solo. MiniMax puso un mostrador aparte donde se habla ese mismo idioma.
+#
+#  Entonces: el mismo programa (Claude Code) puede hablar con los dos.
+#  Solo hay que decirle a quién le habla y con qué credencial.
+#
+#  🔗 DÓNDE ESTÁ LA PUERTA:
+#     https://api.minimax.io/anthropic
+#
+#  📄 FUENTE: docs oficiales de MiniMax, sección
+#     platform.minimax.io/docs/token-plan/other-tools
+#     "Anthropic-Compatible Protocol"
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# EL NOMBRE DEL PROCESO
+# -----------------------------------------------------------------------------
+# Ojo con el sufijo "[MINIMAX]": GitHub no te deja tener dos archivos con el
+# mismo nombre, así que este se llama distinto al de Claude. Si tuvieras los
+# dos activos, en la pestaña Actions los verías mezclados sin distinguirlos.
+name: Revisión automática con IA [MINIMAX]
+
+
+# -----------------------------------------------------------------------------
+# CUÁNDO SE DISPARA
+# -----------------------------------------------------------------------------
+# Igual que antes: cada vez que alguien abre o actualiza una Pull Request.
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+
+# -----------------------------------------------------------------------------
+# PERMISOS
+# -----------------------------------------------------------------------------
+# GitHub por defecto no deja que un proceso toque nada. Le damos lo mínimo:
+#   contents: read       → leer el código
+#   pull-requests: write → comentar en la PR
+permissions:
+  contents: read
+  pull-requests: write
+  id-token: write
+
+
+jobs:
+  revisar:
+    runs-on: ubuntu-latest
+    name: 🧠 MiniMax lee el código
+
+    steps:
+      # -------------------------------------------------------------------------
+      # PASO 1 — BAJAR EL CÓDIGO
+      # -------------------------------------------------------------------------
+      # La máquina arranca vacía; esto le baja tu repositorio.
+      - name: 📥 Descargar el código
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 1
+
+      # -------------------------------------------------------------------------
+      # PASO 2 — CONFIGURAR LA PUERTA HACIA MINIMAX
+      # -------------------------------------------------------------------------
+      # Este es el paso NUEVO, el que hace toda la diferencia.
+      #
+      # `env:` son variables de entorno: cajitas con información que están
+      # disponibles para TODOS los comandos que se corran después.
+      # Es como dejar NOTAS pegadas en la pantalla de la máquina.
+      #
+      # ¿Por qué hay que borrar primero las de Anthropic?
+      # Porque si las dos existen, gana la de Anthropic (apunta a un servidor
+      # donde no tenés cuenta) y el paso 3 falla con un error rarísimo.
+      # Es como tener dos llaves de la misma puerta: hay que sacar la vieja.
+      - name: 🧹 Limpiar configuración vieja de Anthropic
+        run: |
+          echo "ANTHROPIC_AUTH_TOKEN" >> $GITHUB_ENV
+          echo "" >> $GITHUB_ENV
+          echo "ANTHROPIC_API_KEY" >> $GITHUB_ENV
+          echo "" >> $GITHUB_ENV
+
+      # -------------------------------------------------------------------------
+      # PASO 3 — LA IA HACE LA REVISIÓN
+      # -------------------------------------------------------------------------
+      - name: 🔍 Revisar la Pull Request
+        uses: anthropics/claude-code-action@v1
+        env:
+          # -----------------------------------------------------------------------
+          # 🔑 ACÁ ESTÁ LA MAGIA — LE DECIMOS A QUIÉN LE HABLA
+          # -----------------------------------------------------------------------
+          # ANTHROPIC_BASE_URL
+          #   La dirección de la puerta. Le decimos "en vez de ir a Anthropic,
+          #   andá a MiniMax". El resto del programa ni se entera.
+          #
+          # ANTHROPIC_AUTH_TOKEN
+          #   Tu credencial. Se llama así (y no "API key") porque MiniMax decide
+          #   copiar el nombre de Anthropic para que todo sea igual. El valor
+          #   es tu "Subscription Key", que empieza con `sk-cp-...` y se saca
+          #   de platform.minimax.io → M Plan.
+          #
+          # OJO CON LOS SIGNOS DE DOLLAR: `${{ secrets.NOMBRE }}` NO es lo
+          # mismo que `$NOMBRE`.
+          #   ${{ secrets.X }} → GitHub mete ahí el valor SECRETO de la variable
+          #                         "X" que guardaste en Settings.
+          #   $NOMBRE          → bash lee una variable normal del sistema.
+          # Confundirlos es el error más común de esta configuración.
+          #
+          ANTHROPIC_BASE_URL: https://api.minimax.io/anthropic
+          ANTHROPIC_AUTH_TOKEN: ${{ secrets.MINIMAX_API_KEY }}
+
+          # -----------------------------------------------------------------------
+          # 🧠 QUÉ MODELO USAR
+          # -----------------------------------------------------------------------
+          # `ANTHROPIC_MODEL` = el modelo "grande" (el que piensa).
+          # Los otros tres (SONNET, OPUS, HAIKU) son los modelos que el programa
+          # usa para tareas chicas: leer un archivo, escribir un título, etc.
+          # Si no los definís, el programa intenta pedirle esos modelos a
+          # Anthropic y falla. Por eso hay que poner los cuatro.
+          ANTHROPIC_MODEL: MiniMax-M3.1-Flash-Preview
+          ANTHROPIC_DEFAULT_SONNET_MODEL: MiniMax-M3.1-Flash-Preview
+          ANTHROPIC_DEFAULT_OPUS_MODEL: MiniMax-M3.1-Flash-Preview
+          ANTHROPIC_DEFAULT_HAIKU_MODEL: MiniMax-M3.1-Flash-Preview
+
+          # -----------------------------------------------------------------------
+          # 📏 VENTANA DE CONTEXTO
+          # -----------------------------------------------------------------------
+          # "Contexto" es la cantidad de texto que el modelo puede mirar de una
+          # sola vez, como la memoria de trabajo. Acá le decimos que la IA
+          # recorte sola (compacte) cuando se le llene.
+          #
+          # El valor sale de la config oficial de MiniMax para Claude Code.
+          # Si lo ponés mal, el proceso se corta solo a mitad de la revisión
+          # con un error de "context window exceeded".
+          CLAUDE_CODE_AUTO_COMPACT_WINDOW: "524288"
+        with:
+          # `track_progress: true` muestra un comentario con el progreso
+          # ("Leyendo ☑ Analizando ☑") para que no parezca colgado.
+          track_progress: true
+
+          # El encargo. Es texto normal, no código.
+          prompt: |
+            Soy el revisor automático de este repositorio.
+
+            DATOS DE ESTA EJECUCIÓN:
+            - Repositorio: ${{ github.repository }}
+            - Número de PR:   ${{ github.event.pull_request.number }}
+
+            PASOS QUE TENÉS QUE SEGUIR, EN ESTE ORDEN:
+
+            1) LEÉ el archivo REVIEW.md que está en la raíz del repositorio.
+               Ese archivo tiene las reglas del proyecto, divididas en tres
+               categorías: SIEMPRE BLOQUEAR, AVISAR e IGNORAR.
+               No te lo saltes: es el manual que tenés que aplicar.
+
+            2) MIRÁ los cambios que propone ESTA PR.
+               Para verlos usá el comando:
+                   gh pr diff ${{ github.event.pull_request.number }}
+
+            3) COMPARÁ esos cambios contra las reglas del REVIEW.md.
+
+            4) ESCRIBÍ un comentario en la PR con:
+                 - Lo que está MAL, diciendo el archivo y la línea exacta.
+                 - Lo que es una sugerencia (categoría AVISAR).
+                 - Al final, un resumen corto.
+
+            5) ⚠️ LO MÁS IMPORTANTE ⚠️
+               Terminá tu comentario con una línea EXACTA y sola, que tiene
+               que ser una de estas dos:
+
+                   VEREDICTO: APTO
+                   VEREDICTO: NO APTO
+
+               Poné "NO APTO" si encontraste CUALQUIER regla de la categoría
+               SIEMPRE BLOQUEAR. Si solo hay cosas de la categoría AVISAR,
+               poné "APTO".
+               No escribas NADA más después de esa línea.
+
+            6) SUBÍ el comentario a GitHub con:
+                   gh pr comment ${{ github.event.pull_request.number }} --body "..."
+
+          # Lista blanca: lo que la IA tiene permiso a hacer. Leer y comentar,
+          # nada más. No puede hacer commits ni borrar nada.
+          claude_args: |
+            --allowedTools "mcp__github_inline_comment__create_inline_comment,Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*)"
+
+  # ===========================================================================
+  #  EL CANDADO 🔒  (idéntico al del workflow de Claude)
+  # ===========================================================================
+  # Traduce el veredicto de la IA a rojo/verde para GitHub.
+  bloquear-merge:
+    name: 🔒 ¿Se puede mergear?
+    needs: revisar
+    runs-on: ubuntu-latest
+
+    steps:
+      # Guardamos la hora de arranque en un archivo, para IGNORAR comentarios
+      # viejos y quedarnos solo con el veredicto de ESTA ejecución.
+      - name: 🕐 Guardar la hora de arranque
+        run: echo "DESDE=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_ENV"
+
+      - name: 🔎 Buscar el veredicto
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          bash scripts/bloquear-merge.sh
