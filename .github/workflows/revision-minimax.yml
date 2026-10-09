@@ -1,4 +1,4 @@
-# =============================================================================
+﻿# =============================================================================
 #  🤖 REVISOR AUTOMÁTICO DE CÓDIGO CON IA  —  VERSIÓN MINIMAX
 # =============================================================================
 #
@@ -168,7 +168,7 @@ jobs:
 
             1) LEÉ el archivo REVIEW.md que está en la raíz del repositorio.
                Ese archivo tiene las reglas del proyecto, divididas en tres
-               categorías: SIEMPRE BLOQUEAR, AVISAR e IGNORAR.
+               categorías: GRAVE, AVISAR e IGNORAR.
                No te lo saltes: es el manual que tenés que aplicar.
 
             2) MIRÁ los cambios que propone ESTA PR.
@@ -190,8 +190,11 @@ jobs:
                    VEREDICTO: NO APTO
 
                Poné "NO APTO" si encontraste CUALQUIER regla de la categoría
-               SIEMPRE BLOQUEAR. Si solo hay cosas de la categoría AVISAR,
-               poné "APTO".
+               GRAVE. Si solo hay cosas de la categoría AVISAR, poné "APTO".
+
+               Ojo: esto NO bloquea el merge ni nada. GitHub va a dejar
+               mergear siempre. Solo es un resumen para que quien lea la PR
+               sepa de un vistazo si hay algo grave.
                No escribas NADA más después de esa línea.
 
             6) SUBÍ el comentario a GitHub con:
@@ -201,24 +204,3 @@ jobs:
           # nada más. No puede hacer commits ni borrar nada.
           claude_args: |
             --allowedTools "mcp__github_inline_comment__create_inline_comment,Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*)"
-
-  # ===========================================================================
-  #  EL CANDADO 🔒  (idéntico al del workflow de Claude)
-  # ===========================================================================
-  # Traduce el veredicto de la IA a rojo/verde para GitHub.
-  bloquear-merge:
-    name: 🔒 ¿Se puede mergear?
-    needs: revisar
-    runs-on: ubuntu-latest
-
-    steps:
-      # Guardamos la hora de arranque en un archivo, para IGNORAR comentarios
-      # viejos y quedarnos solo con el veredicto de ESTA ejecución.
-      - name: 🕐 Guardar la hora de arranque
-        run: echo "DESDE=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_ENV"
-
-      - name: 🔎 Buscar el veredicto
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          bash scripts/bloquear-merge.sh

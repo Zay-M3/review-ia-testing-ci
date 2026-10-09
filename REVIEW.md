@@ -1,4 +1,4 @@
-# 📋 REVIEW.md — Las reglas del revisor automático
+﻿# 📋 REVIEW.md — Las reglas del revisor automático
 
 > **Si estás leyendo esto:** este archivo es el "libro de instrucciones" que le
 > entregás a la IA. Ella no adivina qué está bien y qué está mal: hace **exactamente
@@ -22,19 +22,24 @@ Markdown: `#` es un título, `-` es una lista. No es código ni tiene sintaxis r
 Cada regla va en **una** de estas tres cajas. La IA decide en cuál cae cada cosa
 que encuentra:
 
-| Caja | Qué significa | ¿Bloquea el merge? |
+| Caja | Qué significa | Qué hace el revisor |
 |---|---|---|
-| 🛑 **SIEMPRE BLOQUEAR** | Esto es grave. Si está, el PR **no** se puede mergear. | **SÍ** |
-| ⚠️ **AVISAR** | Molesta, pero no rompe nada. Se comenta y se sigue. | No |
-| 🔇 **IGNORAR** | No molestes con esto. | No |
+| 🛑 **GRAVE** | Esto es grave. Rompe producción o filtra secretos. | Lo marca en rojo y avisa que **no conviene mergear** |
+| ⚠️ **AVISAR** | Molesta, pero no rompe nada. Se comenta y se sigue. | Lo menciona como sugerencia |
+| 🔇 **IGNORAR** | No molestes con esto. | No dice nada |
 
-> **¿Por qué importa la diferencia?** Si todo bloqueara, al final nadie prestaría
-> atención al revisor porque siempre estaría en rojo. Es como el semáforo:
-> rojo es para de verdad.
+> **Ojo, esto es importante:** el revisor **no bloquea** el merge. GitHub siempre
+> deja mergear, porque la decisión final la tomás vos. Lo que hace la IA es
+> analizar el código y avisarte con claridad: si hay algo grave, lo destaca con
+> una etiqueta 🛑 para que la decisión sea tuya, no automática.
+
+> **¿Por qué importa la diferencia entre grave y avisar?** Si todo fuera igual de
+> urgente, después de un rato dejarías de leer los comentarios del revisor. Por
+> eso lo grave se destaca y lo demás es solo una sugerencia.
 
 ---
 
-## 🛑 CATEGORÍA 1 — SIEMPRE BLOQUEAR (rompe producción)
+## 🛑 CATEGORÍA 1 — GRAVE (rompe producción o filtra secretos)
 
 - Cualquier **contraseña, token, API key o secreto escrito en el código**.
   Nunca van en el repo: van en variables de entorno.
@@ -85,10 +90,8 @@ que encuentra:
 
 ## 🧾 Cómo tengo que terminar mi respuesta
 
-Esto es lo **más importante** para que funcione el bloqueo automático.
-
-Al final de mi comentario en el Pull Request tengo que escribir
-**exactamente** una de estas dos líneas, y nada más después:
+Al final de tu comentario en el Pull Request escribí una línea de resumen, sola,
+que sea una de estas dos:
 
 ```
 VEREDICTO: APTO
@@ -100,12 +103,12 @@ o bien
 VEREDICTO: NO APTO
 ```
 
-- **NO APTO** = hay al menos un punto de la categoría 🛑.
-- **APTO** = no hay ninguno.
+- **NO APTO** = hay al menos un punto de la categoría 🛑 GRAVE.
+- **APTO** = no hay ninguno (solo cosas de la categoría ⚠️).
 
-> **Si no escribo ninguna de las dos**, el sistema `bloquear-merge.sh` no encuentra
-> la línea y **falla igual** (no deja pasar el PR). Es la posición segura: si la
-> IA se cae o se corta, no se cuela código sin revisar.
+> Esta línea **no bloquea nada** por sí sola: es un resumen para que la persona
+> que lee el PR de un vistazo sepa si hay algo grave. Mergear o no es siempre
+> decisión de quien lo revisa.
 
 ---
 

@@ -19,28 +19,29 @@ anos. Si algo no se entiende, es que esta mal explicado, no tuyo.
           v
    +-------------------------------------------+
    |  GitHub arranca una maquina virtual limpia |   <- esto es "Actions"
-   |  y le da este repo como_material           |
+   |  y le da este repo como material           |
    +-------------------------------------------+
           |
           v
    +-------------------------------------------+
    |  PASO 1: la IA lee el archivo REVIEW.md   |   <- tus reglas
    |  PASO 2: la IA mira que cambio en la PR   |
-   |  PASO 3: la IA postea un comentario       |
+   |  PASO 3: la IA postea los comentarios     |
    +-------------------------------------------+
           |
           v
    +-------------------------------------------+
-   |  PASO 4: un script lee el veredicto        |
-   |  "NO APTO" -> rojo -> NO deja mergear     |
-   |  "APTO"    -> verde -> deja mergear       |
+   |  Vos lees y decidis: mergear o no         |
    +-------------------------------------------+
 ```
 
-**La parte clave que casi nadie te dice:** la IA por si sola **no bloquea**
-nada. Escribe un comentario y ya. Lo que frena el merge es que el proceso
-termine en error (marca roja). Por eso hay un paso extra, el "candado", que
-traduce la opinion de la IA a un semaforo que GitHub si entiende.
+**Algo que casi nadie te dice:** la IA **no bloquea** nada, y esta bien que sea
+asi. Escribe su comentario, marca en rojo lo que esta grave, y la decision
+final es tuya. Un revisor que te PROHIBE tocar el boton de merge se vuelve un
+molestia rapidisimo; uno que te avisa y te explica es un ayuda.
+
+Por eso este proyecto necesita **un solo token**: el de la IA. Nada de token
+de GitHub, nada de reglas que activar a mano.
 
 ---
 
@@ -60,16 +61,7 @@ review-ia-testing/
 |   `-- sin-errores.js                 <- archivo hecho bien, con su test.
 |                                        La IA deberia decir APTO.
 |
-|-- scripts/
-|   `-- bloquear-merge.sh              <- EL CANDADO. Traduce el veredicto
-|                                         de la IA en rojo o verde.
-|
 |-- .gitignore                          <- archivos que no hay que subir.
-|
-|-- .gitattributes                      <- obliga a que los .sh guarden los
-|                                         saltos de linea como los de Linux.
-|                                         Sin esto, el script se rompe al
-|                                         llegar a GitHub.
 |
 `-- .github/
     `-- workflows/
@@ -116,18 +108,18 @@ Abri PowerShell en esta carpeta y escribí estos comandos, uno por uno:
 ```powershell
 cd $env:USERPROFILE\Desktop\review-ia-testing
 
-git remote add origin https://github.com/TU_USUARIO/review-ia-testing.git
+git remote add origin git@github.com:TU_USUARIO/review-ia-testing.git
 git branch -M main
 git add .
 git commit -m "Primera version del revisor con IA"
 git push -u origin main
 ```
 
-> Si te pide usuario y contrasena: usuario es tu usuario de GitHub, y
-> **en vez de contrasena** tenes que pegar un "token personal".
-> Buscalo en GitHub → tu foto → Settings → Developer settings →
-> Personal access tokens → Generate new token (classic), con permiso `repo`.
-> GitHub ya no acepta la contrasena normal por linea de comandos.
+> **Ojo, la direccion empieza con `git@github.com`, no con `https://`.**
+> Asi usas tu llave SSH y **GitHub nunca te pide contrasena ni token**.
+> La version con `https://` es la que te hace crear un "token personal", que
+> es justo lo que estamos tratando de evitar. Si ya tenes SSH configurado
+> (es que pudiste hacer `git push` antes), esto te va a funcionar derecho.
 
 ---
 
@@ -165,42 +157,11 @@ Despues te imprime un texto largo que empieza con `sk-ant-oat01-`.
 > **Por que "secret" y no una variable normal?**
 > Un secret esta cifrado y GitHub nunca lo muestra de nuevo en pantalla.
 > En cambio, una variable normal se puede ver editando el YAML.
-> Las claves tienen que ser secrets, siempre.---
-
-## 6. Activar el bloqueo de verdad (Branch Protection)
-
-Esto es **imprescindible**. Sin este paso, el revisor escribe su comentario,
-pone el semaforo en rojo, y GitHub lo ignora: vos igual podes mergear.
-
-Que es lo que hay que activar:
-
-1. En tu repositorio: **Settings**.
-2. Menu lateral: **Rules** → **Rulesets**.
-3. **New ruleset** → **New repository ruleset**.
-4. Completar:
-
-   | Campo | Valor |
-   |---|---|
-   | **Ruleset Name** | `bloquear-codigo-malo` |
-   | **Enforcement status** | Active |
-   | **Target branches** | `main` |
-
-5. En **Rules**, activar la casilla:
-   **Require status checks to pass before merging**.
-6. Cuando te pida elegir el check, escribi:
-   `🔒 ¿Se puede mergear?`
-   (es el nombre que le pusimos al job en `revision.yml`; si no aparece en la
-   lista, guardalo y volve a cargar la pagina: a veces hay que ejecutar el
-   workflow una vez antes de que GitHub lo conozca).
-7. Guardar.
-
-**Lo que acabas de hacer:** GitHub ahora dice *"no puedo mergear esta PR hasta
-que el check 🔒 pase en verde"*. Como la IA devuelve rojo cuando encuentra algo
-grave, el codigo problematico no puede pasar.
+> Las claves tienen que ser secrets, siempre.
 
 ---
 
-## 7. Como hacer la prueba
+## 6. Como hacer la prueba
 
 ### Prueba A: deberia FALLAR
 
@@ -230,10 +191,13 @@ grave, el codigo problematico no puede pasar.
 4. Esperar. La IA tarda entre 1 y 3 minutos.
 
 5. **Lo que deberias ver:**
-   - Un comentario con el analisis y las reglas que se violaron.
+   - Un comentario general con el analisis y las reglas que se violaron.
+   - Comentarios pegados en las lineas exactas del codigo que esta mal.
+   - Cada punto grave marcado con 🛑 y el archivo y la linea.
    - Al final, la linea `VEREDICTO: NO APTO`.
-   - El check 🔒 en **rojo**.
-   - El boton **Merge pull request** en gris o con un cartel que impide mergear.
+
+6. **El boton Merge pull request sigue habilitado.** Eso es a proposito: la IA
+   te aviso, pero mergear o no lo decís vos.
 
 ### Prueba B: deberia PASAR
 
@@ -258,8 +222,6 @@ grave, el codigo problematico no puede pasar.
 4. **Lo que deberias ver:**
    - Comentario de la IA diciendo que esta todo bien.
    - La linea `VEREDICTO: APTO`.
-   - El check 🔒 en **verde**.
-   - Boton **Merge pull request** habilitado.
 
 ### Prueba C: cambiar las reglas y ver el efecto
 
@@ -269,7 +231,7 @@ nada del workflow.
 
 ---
 
-## 8. La lista para diagnosticar
+## 7. La lista para diagnosticar
 
 | Lo que pasa | Por que | Que hacer |
 |---|---|---|
@@ -277,9 +239,8 @@ nada del workflow.
 | `Error: Resource not accessible by integration` | Faltan permisos | Agregar `pull-requests: write` en `revision.yml` |
 | `Error: OAuth token not found` | El secret no esta puesto | Repetir pasos 5a y 5b. Ojo: es `CLAUDE_CODE_OAUTH_TOKEN` en mayusculas |
 | `Error: claude not found` | No hay sesion | El secret caduca. Repetir `claude setup-token` |
-| El check queda en rojo con "no se encontro veredicto" | La IA no escribio la linea final | Mirá los logs. Suele ser que el `prompt` quedo cortado |
-| El check esta rojo pero GitHub deja mergear | Falta el Branch Protection | Repetir la seccion 6 |
-| `zjq: command not found` | (no deberia pasar) | Volver a correr el job desde la pestana Actions |
+| La IA no escribio la linea `VEREDICTO:` | Se corto el comentario | Mirá los logs. Suele ser que el `prompt` quedo cortado |
+| Dice que hay algo grave pero el codigo esta bien | Es un falso positivo | Movelo de categoria en `REVIEW.md`, de GRAVE a AVISAR |
 
 **Como ver los logs:** pestana **Actions** de tu repo → click en el run que
 fallo → click en el paso que fallo → se abre la pantalla con todo lo que
@@ -287,24 +248,24 @@ escribio la maquina.
 
 ---
 
-## 9. Ajustar el comportamiento cuando se equivoca
+## 8. Ajustar el comportamiento cuando se equivoca
 
 Es normal que al principio la IA sea estricta de mas o de menos.
 
-**Si bloquea de mas** (te frena cosas que estan bien): mover la regla de
-`SIEMPRE BLOQUEAR` a `AVISAR` en `REVIEW.md`.
+**Si marca de mas** (te avisa de cosas que estan bien): mover esa regla de la
+categoria `GRAVE` a `AVISAR` en `REVIEW.md`.
 
-**Si deja pasar de mas** (no frena lo que deberia): agregar el caso concreto
-a `SIEMPRE BLOQUEAR`. Cuanto mas concreto sea el ejemplo, mejor. En vez de
+**Si marca de menos** (no te avisa de lo que deberia): agregar el caso concreto
+a la categoria `GRAVE`. Cuanto mas concreto sea el ejemplo, mejor. En vez de
 "no dejar pasar secrets", mejor:
-*"si una cadena tiene la forma sk-... o contiene 'password', bloquear"*.
+*"si una cadena tiene la forma sk-... o contiene 'password', marcarla grave"*.
 
 **Se llama "falso positivo"** cuando marca algo que esta bien, y
 **"falso negativo"** cuando deja pasar algo que esta mal.
 
 ---
 
-## 10. Cuanto cuesta
+## 9. Cuanto cuesta
 
 Con tu suscripcion de Claude Pro o Max: **cero extra**. Usa el mismo plan que
 ya estas pagando.
@@ -316,16 +277,15 @@ Lo que si cuesta:
 
 ---
 
-## 11. Resumen en 6 pasos
+## 10. Resumen en 5 pasos
 
 1. Crear el repo vacio en GitHub.
 2. `git remote add origin ...` y `git push`.
-3. `claude setup-token` y pegar el secret en GitHub.
-4. Activar el Branch Protection con el check `🔒 ¿Se puede mergear?`.
-5. Crear una rama, tocar un archivo, abrir la PR.
-6. Ver que la IA comenta y que el semaforo se pone rojo o verde solo.---
+3. Pegar el secret de la IA (Claude o MiniMax) en GitHub. Listo: **solo eso**.
+4. Crear una rama, tocar un archivo, abrir la PR.
+5. Leer el comentario de la IA y decidir vos si mergear.---
 
-## 7. ¿Claude o MiniMax? Elegí el tuyo
+## 11. ¿Claude o MiniMax? Elegí el tuyo
 
 Buena pregunta: **el workflow NO necesita Claude**. Hay dos archivos y cada
 uno habla con una IA distinta. Los dos hacen exactamente lo mismo.
@@ -384,12 +344,10 @@ borrá el otro (o simplemente renombrá la extensión del que no uses a
 
 ---
 
-## 8. Problemas frecuentes
+## 12. Problemas frecuentes
 
 | Síntoma | Causa probable | Solución |
 |---|---|---|
 | `Error: Invalid API key` | El secreto se llama distinto a como lo pide el workflow | Revisá el nombre: son **exactamente** `CLAUDE_CODE_OAUTH_TOKEN` o `MINIMAX_API_KEY` |
-| El semáforo nunca se pone rojo | Falta activar el Branch Protection (paso 6) | Settings → Rules → Rulesets |
-| `bloquear-merge.sh: not found` | Git lo guardó con saltos de línea de Windows | Ya está resuelto con `.gitattributes` |
 | La IA responde en chino o mezclando idiomas | El modelo se confundió | Agregalo a `REVIEW.md`: "Responde siempre en español" |
 | El workflow no arranca | El YAML tiene un error de sangría | Revisá que las líneas con `#` no estén pegadas a código |
