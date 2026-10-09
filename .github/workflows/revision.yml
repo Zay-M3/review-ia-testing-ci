@@ -158,6 +158,12 @@ jobs:
 
             PASOS QUE TENÉS QUE SEGUIR, EN ESTE ORDEN:
 
+            0) 🗣️ IMPORTANTE — HABLÁ EN ESPAÑOL
+               Todo lo que escribas tiene que estar en español de Argentina,
+               como si le explicaras el código a un niño de 10 años. Nada de
+               inglés, nada de chino, nada de traducciones raras. Aunque el
+               código esté escrito en inglés, tus comentarios van en español.
+
             1) LEÉ el archivo REVIEW.md que está en la raíz del repositorio.
                Ese archivo tiene las reglas del proyecto, divididas en tres
                categorías: SIEMPRE BLOQUEAR, AVISAR e IGNORAR.
