@@ -62,6 +62,23 @@ jobs:
     runs-on: ubuntu-latest
     name: 🧠 MiniMax lee el código
 
+    # -------------------------------------------------------------------------
+    # 🌍 ¿EN QUÉ ENTORNO CORRE?  ← ESTA LÍNEA ES LA IMPORTANTE
+    # -------------------------------------------------------------------------
+    # Tu clave NO está en los secretos del repositorio: la guardaste dentro
+    # de un ENTORNO (un grupo con nombre, tipo "production" o "dev"). Y hay una
+    # regla de GitHub medio tramposa:
+    #
+    #   Si la clave vive dentro de un entorno, el workflow tiene que DECIRLE
+    #   con qué entorno trabaja. Si no lo dice, GitHub finge que la clave no
+    #   existe (y el error que te da es unerl garaje que no dice nada).
+    #
+    # O sea: la clave estaba bien puesta y el que estaba incompleto era el
+    # workflow. Ya lo corregimos.
+    #
+    # ⚠️ Si algún día renombrás el entorno en GitHub, cambiá esta línea también.
+    environment: MINIMAX_API_KEY
+
     steps:
       # -------------------------------------------------------------------------
       # PASO 1 — BAJAR EL CÓDIGO
@@ -111,7 +128,7 @@ jobs:
       # ⚠️ `secrets.GITHUB_TOKEN` NO es un token que tengas que crear vos:
       # GitHub lo genera solo, le da permiso de commenting en la PR y lo
       # borra cuando termina el job. Es distinto a tu clave de MiniMax.
-      - name: 🩺 Diagnóstico: qué claves ve este job
+      - name: 🩺 Diagnostico - que claves ve este job
         if: always()
         env:
           SECRETS_JSON: ${{ toJSON(secrets) }}
@@ -119,7 +136,6 @@ jobs:
           PR: ${{ github.event.pull_request.number }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          printf '### 🩺 Diagnóstico del revisor\n\n**Secretos que ve este job** (los valores van tapados):\n\n```json\n%s\n```\n\n**Variables de GitHub:**\n\n```json\n%s\n```\n' "$SECRETS_JSON" "$VARS_JSON" > cuerpo.txt
           {
             echo "### 🩺 Diagnóstico del revisor"
             echo ""
@@ -134,7 +150,7 @@ jobs:
             echo '```json'
             echo "$VARS_JSON"
             echo '```'
-          } >> "$GITHUB_STEP_SUMMARY"
+          } | tee "$GITHUB_STEP_SUMMARY" > cuerpo.txt
           gh pr comment "$PR" --body-file cuerpo.txt || echo "No se pudo comentar en la PR"
 
       # -------------------------------------------------------------------------
@@ -150,14 +166,12 @@ jobs:
       # Con el `||` nos sirve de las dos. Si guardaste la clave en Variables
       # en vez de en Secrets, esta versión funciona igual.
       #
-      # 🧹 TEMPORAL: abajo están los nombres alternativos que alguien podría
-      #    haber puesto mal (con "l" en vez de "x", o con espacios convertidos
-      #    en guion bajo). Sirven para que funcione aunque el secreto esté mal
-      #    escrito. Cuando lo renombres bien a MINIMAX_API_KEY, se pueden BORRAR
-      #    los alternatives y dejar solo el primero.
+      # ✅ El nombre de la clave está CORRECTO (es `MINIMAX_API_KEY`).
+      # Antes también aceptábamos nombres mal escritos por las dudas, pero ya
+      # no hace falta: se sabe que el nombre es ese y único.
       - name: 🔎 Chequear que llegó la clave
         env:
-          KEY: ${{ secrets.MINIMAX_API_KEY || vars.MINIMAX_API_KEY || secrets.Minimals_API_Key || vars.Minimals_API_Key || secrets.MINIMALS_API_KEY || vars.MINIMALS_API_KEY }}
+          KEY: ${{ secrets.MINIMAX_API_KEY }}
         run: |
           if [ -z "$KEY" ]; then
             echo "❌ No llegó ninguna clave de MiniMax. Revisá esto:"
@@ -201,7 +215,7 @@ jobs:
           # Confundirlos es el error más común de esta configuración.
           #
           ANTHROPIC_BASE_URL: https://api.minimax.io/anthropic
-          ANTHROPIC_AUTH_TOKEN: ${{ secrets.MINIMAX_API_KEY || vars.MINIMAX_API_KEY || secrets.Minimals_API_Key || vars.Minimals_API_Key || secrets.MINIMALS_API_KEY || vars.MINIMALS_API_KEY }}
+          ANTHROPIC_AUTH_TOKEN: ${{ secrets.MINIMAX_API_KEY }}
 
           # -----------------------------------------------------------------------
           # 🧠 QUÉ MODELO USAR
