@@ -10,8 +10,11 @@
 //  proposito, para ver si el profesor (en este caso, la IA) las detecta.
 //
 //  Cuando abras una Pull Request agregando o modificando este archivo,
-//  la IA deberia decirte "VEREDICTO: NO APTO" y GitHub NO te deberia dejar
-//  mergear. Si te dice "APTO", algo anda mal.
+//  la IA deberia decirte "VEREDICTO: NO APTO" y marcar cada problema con
+//  la linea exacta donde esta. Si te dice "APTO", algo anda mal.
+//
+//  Ojo: la IA NO bloquea el merge. GitHub te va a dejar mergear igual,
+//  porque la decision final la tomas vos.
 //
 //  CADA ERROR DE ABAJO CORRESPONDE A UNA REGLA DEL REVIEW.md.
 //  Los marque con [ERROR #n] para que sepas cual.
@@ -24,7 +27,7 @@ const express = require('express');
 const app = express();
 const { Pool } = require('pg');
 
-// [ERROR #1] CATEGORIA "SIEMPRE BLOQUEAR" - SECRETO EN EL CODIGO
+// [ERROR #1] CATEGORIA "GRAVE" - SECRETO EN EL CODIGO
 //
 // Esta contrasena esta escrita aca, en el archivo, en texto plano.
 // Si subis esto a GitHub, queda guardada en la historia del repositorio
@@ -36,7 +39,7 @@ const { Pool } = require('pg');
 //
 const DB_PASSWORD = 'S3cr3T0-de-la-banza-2024!';
 
-// [ERROR #2] CATEGORIA "SIEMPRE BLOQUEAR" - ENDPOINT NUEVO SIN TEST
+// [ERROR #2] CATEGORIA "GRAVE" - ENDPOINT NUEVO SIN TEST
 //
 // Este endpoint es nuevo. Segun el REVIEW.md, todo endpoint nuevo tiene que
 // tener un test que lo pruebe. No hay ninguno en este archivo.
@@ -46,7 +49,7 @@ app.get('/api/clientes', async (req, res) => {
   const db = new Pool({
     host: 'localhost',
     user: 'admin',
-    // [ERROR #3] CATEGORIA "SIEMPRE BLOQUEAR" - SQL PEGADO CON TEXTOS
+    // [ERROR #3] CATEGORIA "GRAVE" - SQL PEGADO CON TEXTOS
     //
     // Acá concatenamos el ID que viene de la URL directo dentro del texto
     // de la consulta. Un usuario podría mandar esto por la URL:
@@ -110,7 +113,7 @@ function calcularTotal(cantidad, precioBase) {
 // -----------------------------------------------------------------------------
 // Ruta que NO chequea permisos
 // -----------------------------------------------------------------------------
-// [ERROR #7] CATEGORIA "SIEMPRE BLOQUEAR" - SIN AUTORIZACION
+// [ERROR #7] CATEGORIA "GRAVE" - SIN AUTORIZACION
 //
 // Esta ruta devuelve datos privados de un usuario (su email y su telefono),
 // pero no pregunta NADA sobre quien lo esta pidiendo. Cualquiera, con solo
