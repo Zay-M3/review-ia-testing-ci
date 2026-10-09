@@ -64,6 +64,13 @@ review-ia-testing/
 |   `-- bloquear-merge.sh              <- EL CANDADO. Traduce el veredicto
 |                                         de la IA en rojo o verde.
 |
+|-- .gitignore                          <- archivos que no hay que subir.
+|
+|-- .gitattributes                      <- obliga a que los .sh guarden los
+|                                         saltos de linea como los de Linux.
+|                                         Sin esto, el script se rompe al
+|                                         llegar a GitHub.
+|
 `-- .github/
     `-- workflows/
         `-- revision.yml               <- EL PLANO DE LA MAQUINA.
