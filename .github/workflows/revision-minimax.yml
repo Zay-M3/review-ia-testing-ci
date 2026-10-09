@@ -1,4 +1,4 @@
-# =============================================================================
+﻿# =============================================================================
 #  🤖 REVISOR AUTOMÁTICO DE CÓDIGO CON IA  —  VERSIÓN MINIMAX
 # =============================================================================
 #
@@ -264,10 +264,15 @@ jobs:
           cat salida.txt
           echo "============================="
 
+          # OJO: un código de salida distinto de cero NO significa que la
+          # revisión haya fallado. Puede haber salido mal DESPUÉS de haber
+          # posteado el comentario (por ejemplo, un problema de red al
+          # terminar). Lo que importa es el comentario de la PR, así que no
+          # cortamos acá: seguimos y lo verificamos abajo.
           if [ $codigo -ne 0 ]; then
             echo ""
-            echo "❌ La IA no pudo terminar (código $codigo). Lo de arriba es el error."
-            exit $codigo
+            echo "⚠️ La IA terminó con código $codigo. Puede haber hecho el trabajo"
+            echo "   igual, así que verificamos el comentario antes de decidir."
           fi
 
           # ---------- LEEMOS EL VEREDICTO QUE DIJO LA IA -------------------
