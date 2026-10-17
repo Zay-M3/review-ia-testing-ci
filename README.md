@@ -65,12 +65,17 @@ review-ia-testing/
 |
 `-- .github/
     `-- workflows/
-        `-- revision.yml               <- EL PLANO DE LA MAQUINA.
+        `-- revision-minimax.yml       <- EL PLANO DE LA MAQUINA.
                                           Dice cuando arrancar y que hacer.
+scripts/
+`-- revisor-minimax.sh                 <- el que habla con MiniMax (1 llamada).
+docs/
+`-- REVISOR-MINIMAX.md                 <- como funciona por dentro y por que.
 ```
 
-Los archivos que importan son dos: **REVIEW.md** (lo que queres que revise) y
-**revision.yml** (la machinery que lo hace).
+Los archivos que importan son tres: **REVIEW.md** (lo que queres que revise),
+**revision-minimax.yml** (la machinery) y **scripts/revisor-minimax.sh**
+(la llamada a la IA). Detalle tecnico en `docs/REVISOR-MINIMAX.md`.
 
 ---
 
@@ -80,14 +85,10 @@ Los archivos que importan son dos: **REVIEW.md** (lo que queres que revise) y
 |---|---|---|
 | Una cuenta de GitHub | Para tener repositorios | Si |
 | Un repositorio en GitHub | Para hostear esto | Si |
-| Claude Pro o Max (suscripcion) | Para que la IA revise con tu plan | No, son ~20 USD/mes |
-| O una API key de Anthropic | Alternativa, se paga por uso | Depende del uso |
+| Plan de MiniMax (M Plan) | Para que la IA revise | Segun tu plan |
 
-**La diferencia importante:**
-
-- Con `claude setup-token` usas tu **suscripcion**. No sumas nada de gasto.
-- Con `ANTHROPIC_API_KEY` usas la **API**, que se cobra aparte por cada uso.
-  Si tenes una tarjeta que no querés que se te gaste sola, usá el token.
+Solo hace falta **una clave de MiniMax**. No se usa Claude ni ninguna API de
+Anthropic.
 
 ---
 
@@ -125,39 +126,21 @@ git push -u origin main
 
 ## 5. Como darle la llave a la IA
 
-La IA necesita una credencial para saber quien es. Son **dos pasos**, y se
-hacen una sola vez por repositorio.
+Se hace **una sola vez por repositorio**.
 
-### Paso 5a - Sacar el token en tu computadora
-
-Abre PowerShell (o la terminal) y escribe:
-
-```powershell
-claude setup-token
-```
-
-Se abre el navegador, inicias sesion con tu cuenta de Claude y autorizas.
-Despues te imprime un texto largo que empieza con `sk-ant-oat01-`.
-**Copiá ese texto entero.** No lo mandes a nadie: es como una contrasena.
-
-### Paso 5b - Guardarlo en GitHub
-
-1. En tu repositorio: **Settings**.
-2. En el menu lateral: **Secrets and variables** → **Actions**.
-3. Click en **New repository secret**.
-4. Completar:
+1. Entra a **platform.minimax.io** y copia tu **Subscription Key**
+   (empieza con `sk-cp-...`). No la mandes a nadie: es como una contrasena.
+2. En tu repo: **Settings -> Environments -> New environment**, con el nombre
+   exacto `MINIMAX_API_KEY`.
+3. Dentro de ese environment: **Add environment secret**.
 
    | Campo | Valor |
    |---|---|
-   | **Name** | `CLAUDE_CODE_OAUTH_TOKEN` |
-   | **Secret** | el texto que copiaste en el paso anterior |
+   | **Name** | `MINIMAX_API_KEY` |
+   | **Secret** | la key que copiaste |
 
-5. **Add secret**.
-
-> **Por que "secret" y no una variable normal?**
-> Un secret esta cifrado y GitHub nunca lo muestra de nuevo en pantalla.
-> En cambio, una variable normal se puede ver editando el YAML.
-> Las claves tienen que ser secrets, siempre.
+> **Por que "secret" y no una variable normal?** Un secret esta cifrado y
+> GitHub nunca lo muestra de nuevo. Las claves van siempre como secret.
 
 ---
 
@@ -236,9 +219,9 @@ nada del workflow.
 | Lo que pasa | Por que | Que hacer |
 |---|---|---|
 | El workflow ni siquiera aparece en Actions | El archivo esta mal guardado | Tiene que estar en `.github/workflows/` y terminar en `.yml` o `.yaml` |
-| `Error: Resource not accessible by integration` | Faltan permisos | Agregar `pull-requests: write` en `revision.yml` |
-| `Error: OAuth token not found` | El secret no esta puesto | Repetir pasos 5a y 5b. Ojo: es `CLAUDE_CODE_OAUTH_TOKEN` en mayusculas |
-| `Error: claude not found` | No hay sesion | El secret caduca. Repetir `claude setup-token` |
+| `Error: Resource not accessible by integration` | Faltan permisos | Agregar `pull-requests: write` en `revision-minimax.yml` |
+| `Fallo la llamada a MiniMax` (HTTP 401/403) | La clave falta o esta mal | Revisa el secret `MINIMAX_API_KEY` dentro del environment `MINIMAX_API_KEY` |
+| `la API respondio 200 pero sin texto (max_tokens)` | El razonamiento de la IA se comio el cupo | Subir `MAX_TOKENS` en `scripts/revisor-minimax.sh` |
 | La IA no escribio la linea `VEREDICTO:` | Se corto el comentario | Mirá los logs. Suele ser que el `prompt` quedo cortado |
 | Dice que hay algo grave pero el codigo esta bien | Es un falso positivo | Movelo de categoria en `REVIEW.md`, de GRAVE a AVISAR |
 
@@ -267,13 +250,13 @@ a la categoria `GRAVE`. Cuanto mas concreto sea el ejemplo, mejor. En vez de
 
 ## 9. Cuanto cuesta
 
-Con tu suscripcion de Claude Pro o Max: **cero extra**. Usa el mismo plan que
-ya estas pagando.
+Cada revision es **una sola llamada** a MiniMax (reglas + diff). Se descuenta de
+tu plan de MiniMax. El diff se corta a 150.000 caracteres para acotar el gasto.
 
 Lo que si cuesta:
 - Los minutos de GitHub Actions. Los repos publicos son gratis; los privados
   dan 2000 minutos por mes en el plan free.
-- Tu propia suscripcion de Claude.
+- Tu plan de MiniMax.
 
 ---
 
@@ -281,66 +264,28 @@ Lo que si cuesta:
 
 1. Crear el repo vacio en GitHub.
 2. `git remote add origin ...` y `git push`.
-3. Pegar el secret de la IA (Claude o MiniMax) en GitHub. Listo: **solo eso**.
+3. Pegar el secret de MiniMax (`MINIMAX_API_KEY`) en GitHub. Listo: **solo eso**.
 4. Crear una rama, tocar un archivo, abrir la PR.
 5. Leer el comentario de la IA y decidir vos si mergear.---
 
-## 11. ¿Claude o MiniMax? Elegí el tuyo
+## 11. Como habla con MiniMax (y por que es seguro)
 
-Buena pregunta: **el workflow NO necesita Claude**. Hay dos archivos y cada
-uno habla con una IA distinta. Los dos hacen exactamente lo mismo.
+El workflow **no instala Claude Code ni ningun agente**. Arma un texto con las
+reglas (`REVIEW.md`) y el diff de la PR, lo manda a MiniMax en **una llamada**
+al endpoint compatible con Anthropic (`https://api.minimax.io/anthropic`) y
+publica lo que vuelve. La IA **solo devuelve texto: no ejecuta nada**.
 
-```
-┌─────────────────────────────┬──────────────────┬──────────────────┐
-│                             │  revision.yml    │revision-minimax.yml│
-├─────────────────────────────┼──────────────────┼──────────────────┤
-│ ¿Qué IA usa?                │  Claude          │  MiniMax         │
-│ ¿Qué necesitás tener?       │  Suscripción     │  Suscripción     │
-│                             │  de Claude       │  M Plan          │
-│ ¿Dónde sacás la credencial? │  `claude         │  platform.minimax│
-│                             │  setup-token`    │  .io → M Plan    │
-│ Nombre del secreto          │CLAUDE_CODE_     │  MINIMAX_API_KEY│
-│                             │  OAUTH_TOKEN     │                  │
-│ Costo del review            │  incluido en tu  │  incluido en tu  │
-│                             │  plan            │  plan            │
-└─────────────────────────────┴──────────────────┴──────────────────┘
-```
+Puntos clave (explicados en `docs/REVISOR-MINIMAX.md`):
 
-### El truco que hace posible usar MiniMax
-
-Claude Code es un programa que, por dentro, habla con Anthropic usando un
-formato de mensajes propio. **MiniMax construyó un servidor que habla
-exactamente ese mismo formato** (lo llaman "Anthropic-Compatible Protocol").
-
-Entonces el mismo programa puede hablar con los dos: solo hay que decirle
-**a qué dirección** va y **con qué credencial**. Eso son dos renglones:
-
-```yaml
-ANTHROPIC_BASE_URL: https://api.minimax.io/anthropic
-ANTHROPIC_AUTH_TOKEN: ${{ secrets.MINIMAX_API_KEY }}
-```
-
-`BASE_URL` es la dirección de la puerta. `AUTH_TOKEN` es la credencial.
+- Las reglas y el script salen de la **rama base**, no de la PR: nadie puede
+  cambiar las reglas desde su propia PR.
+- El diff es dato **no confiable**: el prompt le dice a la IA que no obedezca
+  ordenes escritas dentro del diff.
+- Un error de la API **no es lo mismo** que un NO APTO: se informa distinto.
+- Un solo comentario por PR, que se **actualiza** en cada push.
 
 > Fuente: docs oficiales de MiniMax,
-> `platform.minimax.io/docs/token-plan/other-tools` → "Anthropic-Compatible Protocol".
-
-### Cómo configurarlo (si elegís MiniMax)
-
-1. Entrá a **platform.minimax.io** y comprá el **M Plan** (el plan pensado
-   para programar con IA).
-2. Copiá tu **Subscription Key** (empieza con `sk-cp-...`).
-3. En tu repo: **Settings → Secrets and variables → Actions → New repository
-   secret**.
-4. Nombre: `MINIMAX_API_KEY`. Valor: la key que copiaste.
-5. Subí el repo y hacé una PR de prueba.
-
-### ⚠️ Importante: no actives los dos a la vez
-
-Si dejás los dos workflows files, cada PR dispara **dos revisiones** y vas
-a tener dos comentarios de IA peleándose por el mismo PR. Elegí uno y
-borrá el otro (o simplemente renombrá la extensión del que no uses a
-`.yml.txt`).
+> `platform.minimax.io/docs/token-plan/other-tools` -> "Anthropic-Compatible Protocol".
 
 ---
 
@@ -348,6 +293,6 @@ borrá el otro (o simplemente renombrá la extensión del que no uses a
 
 | Síntoma | Causa probable | Solución |
 |---|---|---|
-| `Error: Invalid API key` | El secreto se llama distinto a como lo pide el workflow | Revisá el nombre: son **exactamente** `CLAUDE_CODE_OAUTH_TOKEN` o `MINIMAX_API_KEY` |
+| `Error: Invalid API key` | El secreto se llama distinto a como lo pide el workflow | Revisá el nombre: es **exactamente** `MINIMAX_API_KEY` |
 | La IA responde en chino o mezclando idiomas | El modelo se confundió | Agregalo a `REVIEW.md`: "Responde siempre en español" |
 | El workflow no arranca | El YAML tiene un error de sangría | Revisá que las líneas con `#` no estén pegadas a código |
