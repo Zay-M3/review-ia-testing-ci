@@ -1,344 +1,115 @@
 ﻿# =============================================================================
-#  🤖 REVISOR AUTOMÁTICO DE CÓDIGO CON IA  —  VERSIÓN MINIMAX
+#  Revisor automático de PRs con MiniMax
+#
+#  Como funciona (resumen; detalle en docs/REVISOR-MINIMAX.md):
+#    1. Baja el codigo de la RAMA BASE (confiable), no el de la PR.
+#    2. Pide el diff de la PR por la API de GitHub.
+#    3. Manda reglas (REVIEW.md de la base) + diff a MiniMax en UNA llamada.
+#       La IA no ejecuta nada: solo devuelve texto.
+#    4. El workflow publica/actualiza UN comentario y marca el check.
 # =============================================================================
-#
-#  📖 SI ESTÁS LEYENDO ESTO POR PRIMERA VEZ:
-#
-#  Esto es IGUAL que revision.yml, pero habla con MiniMax en lugar de Claude.
-#  Los dos hacen lo mismo: revisan la Pull Request y ponen el semáforo.
-#
-#  🧠 EL TRUCO ESTÁ AQUÍ (y es lo más bonito de todo):
-#
-#  Claude Code es un programa que, por dentro, habla con Anthropic usando un
-#  formato de mensajes que se llama "formato Anthropic".
-#
-#  MiniMax construyó una puerta en su servidor que HABLA EXACTAMENTE ESE
-#  FORMATO. Es como si en un edificio todos tuvieran que hablar en un idioma
-#  solo. MiniMax puso un mostrador aparte donde se habla ese mismo idioma.
-#
-#  Entonces: el mismo programa (Claude Code) puede hablar con los dos.
-#  Solo hay que decirle a quién le habla y con qué credencial.
-#
-#  🔗 DÓNDE ESTÁ LA PUERTA:
-#     https://api.minimax.io/anthropic
-#
-#  📄 FUENTE: docs oficiales de MiniMax, sección
-#     platform.minimax.io/docs/token-plan/other-tools
-#     "Anthropic-Compatible Protocol"
-# =============================================================================
-
-# -----------------------------------------------------------------------------
-# EL NOMBRE DEL PROCESO
-# -----------------------------------------------------------------------------
-# Ojo con el sufijo "[MINIMAX]": GitHub no te deja tener dos archivos con el
-# mismo nombre, así que este se llama distinto al de Claude. Si tuvieras los
-# dos activos, en la pestaña Actions los verías mezclados sin distinguirlos.
 name: Revisión automática con IA [MINIMAX]
 
-
-# -----------------------------------------------------------------------------
-# CUÁNDO SE DISPARA
-# -----------------------------------------------------------------------------
-# Igual que antes: cada vez que alguien abre o actualiza una Pull Request.
 on:
   pull_request:
     types: [opened, synchronize, reopened]
 
+# Un solo run por PR: si empujás de nuevo, cancela el anterior.
+concurrency:
+  group: revisor-minimax-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
 
-# -----------------------------------------------------------------------------
-# PERMISOS
-# -----------------------------------------------------------------------------
-# GitHub por defecto no deja que un proceso toque nada. Le damos lo mínimo:
-#   contents: read       → leer el código
-#   pull-requests: write → comentar en la PR
+# Minimo necesario. No hace falta id-token (no usamos el GitHub App de Claude).
 permissions:
   contents: read
   pull-requests: write
-  id-token: write
-
 
 jobs:
   revisar:
-    runs-on: ubuntu-latest
     name: 🧠 MiniMax lee el código
-
-    # -------------------------------------------------------------------------
-    # 🌍 ¿EN QUÉ ENTORNO CORRE?  ← ESTA LÍNEA ES LA IMPORTANTE
-    # -------------------------------------------------------------------------
-    # Tu clave NO está en los secretos del repositorio: la guardaste dentro
-    # de un ENTORNO (un grupo con nombre, tipo "production" o "dev"). Y hay una
-    # regla de GitHub medio tramposa:
-    #
-    #   Si la clave vive dentro de un entorno, el workflow tiene que DECIRLE
-    #   con qué entorno trabaja. Si no lo dice, GitHub finge que la clave no
-    #   existe (y el error que te da es un error que no dice nada).
-    #
-    # O sea: la clave estaba bien puesta y el que estaba incompleto era el
-    # workflow. Ya lo corregimos.
-    #
-    # ⚠️ Si algún día renombrás el entorno en GitHub, cambiá esta línea también.
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    # PRs de forks no reciben secretos: sin este filtro fallarian en rojo.
+    if: github.event.pull_request.head.repo.full_name == github.repository
     environment: MINIMAX_API_KEY
-
+    env:
+      # true  -> el check queda ROJO con "NO APTO" (visible de un vistazo).
+      # false -> queda verde y solo se avisa en el comentario.
+      FALLAR_SI_NO_APTO: "true"
     steps:
-      # -------------------------------------------------------------------------
-      # PASO 1 — BAJAR EL CÓDIGO
-      # -------------------------------------------------------------------------
-      # La máquina arranca vacía; esto le baja tu repositorio.
-      - name: 📥 Descargar el código
-        uses: actions/checkout@v6
+      # Rama BASE: el script y REVIEW.md salen de codigo ya revisado y mergeado.
+      # Si usaramos el codigo de la PR, su autor podria cambiar las reglas.
+      - name: 📥 Descargar el código de la rama base
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
+          ref: ${{ github.event.pull_request.base.sha }}
           fetch-depth: 1
+          persist-credentials: false
 
-      # -------------------------------------------------------------------------
-      # PASO 2 — CONFIGURAR LA PUERTA HACIA MINIMAX
-      # -------------------------------------------------------------------------
-      # Este es el paso NUEVO, el que hace toda la diferencia.
-      #
-      # `env:` son variables de entorno: cajitas con información que están
-      # disponibles para TODOS los comandos que se corran después.
-      # Es como dejar NOTAS pegadas en la pantalla de la máquina.
-      #
-      # ¿Por qué hay que borrar primero las de Anthropic?
-      # Porque si las dos existen, gana la de Anthropic (apunta a un servidor
-      # donde no tenés cuenta) y el paso 3 falla con un error rarísimo.
-      # Es como tener dos llaves de la misma puerta: hay que sacar la vieja.
-      #
-      # ⚠️ OJO CON EL FORMATO (esto rompió el workflow el 08/10/2026):
-      # GitHub lee este archivo y en cada línea espera "NOMBRE=valor".
-      #   echo "NOMBRE=" >> $GITHUB_ENV   ✅ correcto (vaciá la variable)
-      #   echo "NOMBRE"   >> $GITHUB_ENV   ❌ error: "Invalid format 'NOMBRE'"
-      #   echo ""        >> $GITHUB_ENV   ❌ error: línea vacía, GitHub la rechaza
-      # Por eso NO hay líneas con `echo ""` acá abajo.
-      - name: 🧹 Limpiar configuración vieja de Anthropic
-        run: |
-          echo "ANTHROPIC_AUTH_TOKEN=" >> $GITHUB_ENV
-          echo "ANTHROPIC_API_KEY=" >> $GITHUB_ENV
-
-
-      # -------------------------------------------------------------------------
-      # PASO 2 BIS — CHEQUEAR QUE LLEGÓ LA CLAVE
-      # -------------------------------------------------------------------------
-      # Este paso es una barrera: si la clave no llegó, se frena acá con un
-      # mensaje que dice QUÉ HAY QUE ARREGLAR. Sin esto, el workflow se cae
-      # más abajo con un error de autenticación que no explica nada.
-      #
-      # La clave se lee con `secrets.MINIMAX_API_KEY` y nada más. Ojo: en este
-      # repositorio la clave NO está en la pestaña SECRETS del repo, sino en el
-      # secreto del ENTORNO MINIMAX_API_KEY (declarado más arriba, en
-      # `environment:`). Desde el punto de vista del workflow el nombre es el
-      # mismo, y de ahí la lee GitHub.
-      #
-      # El nombre de la clave es `MINIMAX_API_KEY`, en mayúsculas y sin
-      # espacios: GitHub convierte los espacios en guiones bajos, así que
-      # "Minimax API Key" quedaría como "Minimax_API_Key" y no coincidiría.
-      - name: 🔎 Chequear que llegó la clave
+      - name: 📄 Traer el diff de la PR
         env:
-          CLAVE_MINIMAX: ${{ secrets.MINIMAX_API_KEY }}
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+          REPO: ${{ github.repository }}
+        run: gh pr diff "$PR" --repo "$REPO" > diff.patch
+
+      - name: 🔍 Pedirle la revisión a MiniMax
+        id: ia
+        env:
+          MINIMAX_API_KEY: ${{ secrets.MINIMAX_API_KEY }}
+          DIFF_FILE: diff.patch
+          OUT_FILE: revision.md
         run: |
-          if [ -z "$CLAVE_MINIMAX" ]; then
-            echo "❌ No llegó ninguna clave de MiniMax. Revisá esto:"
-            echo ""
-            echo "   1) El nombre tiene que ser EXACTAMENTE: MINIMAX_API_KEY"
-            echo "      (GitHub no acepta espacios: si le pusiste 'Minimals API Key',"
-            echo "       quedó como 'Minimals_API_Key' y no sirve)"
-            echo "   2) Que esté en el secreto del ENTORNO MINIMAX_API_KEY"
-            echo "      (Settings -> Environments -> MINIMAX_API_KEY"
-            echo "       -> Environment secrets -> New repository secret)"
-            echo ""
-            echo "   Configurá: Settings -> Environments -> MINIMAX_API_KEY"
-            exit 1
+          # La PR que introduce este script no lo tiene aun en la rama base.
+          if [ ! -f scripts/revisor-minimax.sh ]; then
+            echo "codigo=4" >> "$GITHUB_OUTPUT"
+            exit 0
           fi
-          echo "✅ Llegó la clave. Empieza la revisión."
-
-      # -------------------------------------------------------------------------
-      # PASO 3 — LA IA HACE LA REVISIÓN
-      # -------------------------------------------------------------------------
-      # ⚠️ POR QUÉ ESTO YA NO USA LA "ACCIÓN" DE CLAUDE
-      #
-      # Antes este paso decía `uses: anthropics/claude-code-action@v1`. Esa
-      # acción NO instala el programa por su cuenta: exige que el repositorio
-      # tenga instalada la "Claude Code GitHub App". Si no la tiene, se frena
-      # al instante con este error:
-      #
-      #     Claude Code is not installed on this repository.
-      #
-      # Eso era el congelamiento que veías, y NO tenía nada que ver con MiniMax
-      # ni con tu clave: la clave llegaba bien (el paso anterior va en verde).
-      #
-      # La solución: usar el PROGRAMA directamente. Se instala con npm en dos
-      # segundos y se corre como cualquier otro comando. Sin apps, sin
-      # marketplace, sin permisos raros.
-      - name: 📦 Instalar Claude Code
-        run: |
-          npm install -g @anthropic-ai/claude-code
-          echo "Versión instalada:"
-          claude --version
-
-      - name: 🔍 Revisar la Pull Request
-        env:
-          # 🔑 LE DECIMOS A QUIÉN LE HABLA (esto es lo de MiniMax)
-          # El resto del programa cree que está hablando con Anthropic.
-          ANTHROPIC_BASE_URL: https://api.minimax.io/anthropic
-          ANTHROPIC_AUTH_TOKEN: ${{ secrets.MINIMAX_API_KEY }}
-
-          # 🧠 QUÉ MODELO USAR. Hay que poner los cuatro porque el programa usa
-          #    el "grande" para pensar y los otros para tareas chicas.
-          ANTHROPIC_MODEL: MiniMax-M3.1-Flash-Preview
-          ANTHROPIC_DEFAULT_SONNET_MODEL: MiniMax-M3.1-Flash-Preview
-          ANTHROPIC_DEFAULT_OPUS_MODEL: MiniMax-M3.1-Flash-Preview
-          ANTHROPIC_DEFAULT_HAIKU_MODEL: MiniMax-M3.1-Flash-Preview
-
-          # 📏 VENTANA DE CONTEXTO: le decimos que recorte sola (compacte) cuando
-          #    se le llene, así no se corta a mitad de la revisión.
-          CLAUDE_CODE_AUTO_COMPACT_WINDOW: "524288"
-          # ⏱️ Cada pedido a la IA puede tardar hasta 15 minutos. Más que eso
-          #    ya no aporta nada: si tardó tanto, algo salió mal.
-          API_TIMEOUT_MS: "900000"
-          CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: "1"
-
-          # 🔑 PARA PODER COMENTAR EN LA PR (el token interno de GitHub Actions)
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          # ---------- 1) Escribimos el encargo en un archivo -----------------
-          cat > encargo.md <<'FIN_DEL_ENCARGO'
-          Soy el revisor automático de este repositorio.
-
-          DATOS DE ESTA EJECUCIÓN:
-          - Repositorio: ${{ github.repository }}
-          - Número de PR: ${{ github.event.pull_request.number }}
-
-          PASOS QUE TENÉS QUE SEGUIR, EN ESTE ORDEN:
-
-          0) 🗣 IMPORTANTE: ESCRIBÍ EN ESPAÑOL
-             Todo en español de Argentina, como si le explicaras el código a
-             alguien que no sabe programar. Aunque el código esté en inglés,
-             tus comentarios van en español.
-
-          1) LEÉ el archivo REVIEW.md de la raíz del repositorio.
-             Tiene las reglas del proyecto en tres categorías: GRAVE, AVISAR e
-             IGNORAR. Es el manual que tenés que aplicar.
-
-          2) MIRÁ los cambios de ESTA PR con:
-                gh pr diff ${{ github.event.pull_request.number }}
-
-          3) COMPARÁ esos cambios contra las reglas del REVIEW.md.
-
-          4) ARMÁ el comentario con:
-                - Lo que está MAL, diciendo archivo y línea exacta.
-                - Lo que es sugerencia (categoría AVISAR).
-                - Un resumen corto al final.
-
-          5) ⚠️ TERMINÁ SIEMPRE con una de estas dos líneas, sola y exacta:
-
-                 VEREDICTO: APTO
-                 VEREDICTO: NO APTO
-
-             Va "NO APTO" si encontraste CUALQUIER regla GRAVE. Si solo hay
-             cosas de la categoría AVISAR, va "APTO".
-             Esto NO bloquea el merge: es solo un resumen para quien lea la PR.
-             No escribas NADA más después de esa línea.
-
-          6) SUBÍ el comentario a la PR con EXACTAMENTE este comando:
-
-                gh pr comment ${{ github.event.pull_request.number }} --body-file comentario.md
-
-             ( primero escribís todo el texto en un archivo llamado
-               comentario.md y después corrés ese comando ).
-
-             Es OBLIGATORIO postear el comentario. Si no lo posteás, la revisión
-             no sirve de nada.
-          FIN_DEL_ENCARGO
-
-          # ---------- 2) Corremos la IA con ese encargo ---------------------
-          # `timeout` es un seguro: si la IA se cuelga, a los 20 minutos el
-          # job se frena solo en vez de quedarse colgado para siempre.
-          MINUTOS_MAXIMOS=20
-          timeout $((MINUTOS_MAXIMOS * 60)) claude -p "$(cat encargo.md)" \
-            --model MiniMax-M3.1-Flash-Preview \
-            --output-format text \
-            --permission-mode bypassPermissions \
-            --allowedTools "Bash(gh pr diff:*),Bash(gh pr view:*),Bash(gh pr comment:*),Read,Grep,Glob" \
-            > salida.txt 2>&1
+          set +e
+          veredicto="$(bash scripts/revisor-minimax.sh)"
           codigo=$?
+          set -e
+          echo "codigo=$codigo" >> "$GITHUB_OUTPUT"
+          echo "veredicto=$veredicto" >> "$GITHUB_OUTPUT"
+          # Un error de la API / sin veredicto NO es "NO APTO": se distingue abajo.
+          exit 0
 
-          echo "===== LO QUE DIJO LA IA ====="
-          cat salida.txt
-          echo "============================="
-
-          # OJO: un código de salida distinto de cero NO significa que la
-          # revisión haya fallado. Puede haber salido mal DESPUÉS de haber
-          # posteado el comentario (por ejemplo, un problema de red al
-          # terminar). Lo que importa es el comentario de la PR, así que no
-          # cortamos acá: seguimos y lo verificamos abajo.
-          if [ $codigo -ne 0 ]; then
-            echo ""
-            echo "⚠️ La IA terminó con código $codigo. Puede haber hecho el trabajo"
-            echo "   igual, así que verificamos el comentario antes de decidir."
+      - name: 💬 Publicar o actualizar el comentario
+        if: steps.ia.outputs.codigo == '0'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+          REPO: ${{ github.repository }}
+        run: |
+          marca='<!-- revisor-minimax -->'
+          { echo "$marca"; cat revision.md; } > comentario.md
+          id="$(gh api "repos/$REPO/issues/$PR/comments" --paginate \
+                 --jq ".[] | select(.body | contains(\"$marca\")) | .id" | tail -n 1)"
+          if [ -n "$id" ]; then
+            gh api -X PATCH "repos/$REPO/issues/comments/$id" -F body=@comentario.md > /dev/null
+          else
+            gh pr comment "$PR" --repo "$REPO" --body-file comentario.md
           fi
+          cat revision.md >> "$GITHUB_STEP_SUMMARY"
 
-          # ---------- LEEMOS EL VEREDICTO QUE DIJO LA IA -------------------
-          # No nos fiamos de su palabra: vamos al comentario que la IA acaba
-          # de postear y buscamos la linea "VEREDICTO: ...". Esa linea decide.
-          #
-          # ⚠️ DOS TRAMPAS EN ESTA LINEA (costaron 6 checks en rojo):
-          #
-          # 1) El campo se llama `author`, NO `user`. `user` no existe en el JSON
-          #    de `gh pr view`, da null, el `select` no matchea NUNCA y nos
-          #    quedamos con la lista vacia.
-          #
-          # 2) El login es `github-actions`, NO `github-actions[bot]`. Los
-          #    corchetes son la forma que usa la API de REST de GitHub; `gh`
-          #    (que habla por GraphQL) devuelve el login pelado. Con los
-          #    corchetes el `select` tampoco matchea.
-          #
-          # Como en los dos casos la lista queda vacia, el script llegaba
-          #    al final con `$veredicto` vacio y ponia el check en ROJO por
-          #    mas que la IA ya hubiera posteado `VEREDICTO: APTO`.
-          #
-          # El filtro `.[-1]` se queda con el ULTIMO comentario del bot, el
-          # recien hecho. Sin eso leeriamos todos y la ultima linea seria del
-          # comentario viejo, con otro veredicto.
-          #
-          # OJO CON EL `|| true` DEL FINAL: NO es adorno. Si ninguna linea
-          # matchea, `grep` sale con error, y como el shell de GitHub corre con
-          # `set -e` eso MATABA el script en el acto, sin llegar al mensaje de
-          # abajo. Por eso el log terminaba en "Process completed with exit
-          # code 1" sin decir por que. Con `|| true` el error se convierte en
-          # texto vacio y aca abajo le decimos que no la damos por buena.
-          #
-          # `tr -d '\r'` borra los retornos de carro: si el comentario llega
-          # con finales de linea de Windows, el patron no matchea y el check
-          # se pone rojo por una razon que nadie entiende.
-          veredicto=$(gh pr view ${{ github.event.pull_request.number }} --json comments \
-            --jq '[.comments[] | select(.author.login == "github-actions")] | .[-1].body' \
-            | tr -d '\r' \
-            | grep -E '^[[:space:]]*VEREDICTO:' \
-            | tail -n 1 \
-            || true)
-
-          if [ -z "$veredicto" ]; then
-            echo "⚠️ La IA no escribió ninguna línea VEREDICTO. No la damos por buena."
-            exit 1
+      - name: 🚦 Decidir el color del check
+        env:
+          CODIGO: ${{ steps.ia.outputs.codigo }}
+          VEREDICTO: ${{ steps.ia.outputs.veredicto }}
+        run: |
+          case "$CODIGO" in
+            0) ;;
+            4) echo "::notice::La rama base aun no tiene scripts/revisor-minimax.sh (es la PR que lo agrega). Se omite la revisión; funcionará desde la próxima PR."; exit 0 ;;
+            2) echo "::error::Falló la llamada a MiniMax (clave, red o API). Mirá el log del paso anterior. Esto NO es un NO APTO."; exit 1 ;;
+            3) echo "::error::MiniMax respondió pero sin línea VEREDICTO. No se da por buena."; exit 1 ;;
+            *) echo "::error::Código inesperado: $CODIGO"; exit 1 ;;
+          esac
+          if [ "$VEREDICTO" = "NO APTO" ]; then
+            if [ "$FALLAR_SI_NO_APTO" = "true" ]; then
+              echo "::error::VEREDICTO: NO APTO — hay reglas GRAVES. Leé el comentario de la PR."
+              exit 1
+            fi
+            echo "::warning::VEREDICTO: NO APTO (el check queda verde por configuración)."
+            exit 0
           fi
-
-          # Le sacamos los espacios de los costados y comparamos todo en
-          # mayusculas. Asi un "VEREDICTO:  APTO" con doble espacio, o escrito
-          # en minusculas, NO cuelga el workflow (esto era el AVISAR n°2 que
-          # nos dejo la propia IA en su comentario).
-          veredicto=$(echo "$veredicto" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//' | tr '[:lower:]' '[:upper:]')
-
-          echo "Veredicto leído: $veredicto"
-
-          if [ "$veredicto" = "VEREDICTO: NO APTO" ]; then
-            echo ""
-            echo "❌ VEREDICTO: NO APTO"
-            echo "   La revisión encontró problemas graves. El check queda en ROJO"
-            echo "   a propósito: así se ve de un vistazo que la PR no se puede"
-            echo "   mergear sin mirarla."
-            exit 1
-          fi
-
-          echo ""
-          echo "✅ VEREDICTO: APTO — el check queda en VERDE."
-
-
+          echo "✅ VEREDICTO: APTO"
