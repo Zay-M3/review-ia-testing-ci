@@ -282,7 +282,7 @@ Puntos clave (explicados en `docs/REVISOR-MINIMAX.md`):
 - El diff es dato **no confiable**: el prompt le dice a la IA que no obedezca
   ordenes escritas dentro del diff.
 - Un error de la API **no es lo mismo** que un NO APTO: se informa distinto.
-- Un solo comentario por PR, que se **actualiza** en cada push.
+- Un comentario **nuevo** por cada push, con el commit revisado arriba.
 
 > Fuente: docs oficiales de MiniMax,
 > `platform.minimax.io/docs/token-plan/other-tools` -> "Anthropic-Compatible Protocol".

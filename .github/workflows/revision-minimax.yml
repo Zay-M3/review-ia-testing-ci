@@ -6,7 +6,7 @@
 #    2. Pide el diff de la PR por la API de GitHub.
 #    3. Manda reglas (REVIEW.md de la base) + diff a MiniMax en UNA llamada.
 #       La IA no ejecuta nada: solo devuelve texto.
-#    4. El workflow publica/actualiza UN comentario y marca el check.
+#    4. El workflow publica un comentario NUEVO por revisión y marca el check.
 # =============================================================================
 name: Revisión automática con IA [MINIMAX]
 
@@ -80,16 +80,17 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           PR: ${{ github.event.pull_request.number }}
           REPO: ${{ github.repository }}
+          SHA: ${{ github.event.pull_request.head.sha }}
         run: |
-          marca='<!-- revisor-minimax -->'
-          { echo "$marca"; cat revision.md; } > comentario.md
-          id="$(gh api "repos/$REPO/issues/$PR/comments" --paginate \
-                 --jq ".[] | select(.body | contains(\"$marca\")) | .id" | tail -n 1)"
-          if [ -n "$id" ]; then
-            gh api -X PATCH "repos/$REPO/issues/comments/$id" -F body=@comentario.md > /dev/null
-          else
-            gh pr comment "$PR" --repo "$REPO" --body-file comentario.md
-          fi
+          # Un comentario NUEVO por cada revisión, con el commit revisado arriba
+          # para distinguirlos.
+          {
+            echo "<!-- revisor-minimax -->"
+            echo "_Revisión del commit \`${SHA:0:7}\`_"
+            echo
+            cat revision.md
+          } > comentario.md
+          gh pr comment "$PR" --repo "$REPO" --body-file comentario.md
           cat revision.md >> "$GITHUB_STEP_SUMMARY"
 
       - name: 🚦 Decidir el color del check

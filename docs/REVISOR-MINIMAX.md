@@ -18,7 +18,7 @@ scripts/revisor-minimax.sh
    reglas + diff --> UNA llamada a MiniMax --> texto con "VEREDICTO: ..."
         |
         v
-comentario unico (se actualiza)  +  color del check
+comentario NUEVO por revision (con el commit revisado)  +  color del check
 ```
 
 ## Decisiones de diseño (y por qué)
@@ -32,7 +32,7 @@ comentario unico (se actualiza)  +  color del check
 | **Veredicto leído del propio texto de la IA** | Antes se releía el "último comentario de github-actions" de la PR: podía ser de otro workflow o de una ejecución anterior. |
 | **Códigos de salida distintos** (0 veredicto, 2 error de API/clave, 3 sin veredicto) | Un fallo de infraestructura no debe verse igual que un NO APTO. El workflow lo muestra con mensajes distintos. |
 | **`concurrency` con `cancel-in-progress`** | Un push nuevo cancela la revisión anterior: menos gasto y sin comentarios duplicados. |
-| **Comentario único con marca `<!-- revisor-minimax -->`** | Se actualiza en cada push en vez de apilar un comentario nuevo. |
+| **Un comentario nuevo por revisión**, con el commit revisado en la primera línea | Cada push deja su propio comentario y queda el historial de lo que se dijo. La marca `<!-- revisor-minimax -->` permite identificarlos. Si prefieres uno solo que se edite, hay que volver a buscar la marca y usar `PATCH` sobre ese comentario. |
 | **Permisos mínimos** (`contents: read`, `pull-requests: write`) | Se quitó `id-token: write`: solo hace falta con el GitHub App de Claude. |
 | **`if` para PRs de forks** | Los forks no reciben secretos: sin el filtro el job fallaría en rojo. |
 | **`checkout` fijado por SHA** | El job maneja un secreto; un tag móvil puede cambiar. |
